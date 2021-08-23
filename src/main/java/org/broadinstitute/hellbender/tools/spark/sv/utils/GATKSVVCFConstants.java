@@ -96,6 +96,20 @@ public final class GATKSVVCFConstants {
     public static final String EXPECTED_COPY_NUMBER_FORMAT = "ECN";
     public static final String COPY_NUMBER_QUALITY_FORMAT = "CNQ";
 
+    public static final String START_SPLIT_READ_COUNT_ATTRIBUTE = "SR1";
+    public static final String END_SPLIT_READ_COUNT_ATTRIBUTE = "SR2";
+
+    // PESR aggregation
+    public static final String START_SPLIT_QUALITY_ATTRIBUTE = "SR1Q";
+    public static final String START_SPLIT_CARRIER_SIGNAL_ATTRIBUTE = "SR1CS";
+    public static final String END_SPLIT_QUALITY_ATTRIBUTE = "SR2Q";
+    public static final String END_SPLIT_CARRIER_SIGNAL_ATTRIBUTE = "SR2CS";
+    public static final String TOTAL_SPLIT_QUALITY_ATTRIBUTE = "SRQ";
+    public static final String TOTAL_SPLIT_CARRIER_SIGNAL_ATTRIBUTE = "SRCS";
+    public static final String DISCORDANT_PAIR_COUNT_ATTRIBUTE = "PE";
+    public static final String DISCORDANT_PAIR_QUALITY_ATTRIBUTE = "PEQ";
+    public static final String DISCORDANT_PAIR_CARRIER_SIGNAL_ATTRIBUTE = "PECS";
+
     // filter block
     public static final String ASSEMBLY_BASED_VARIANT_MQ_FILTER_KEY = "LOW_MQ";
     public static final String ASSEMBLY_BASED_VARIANT_ALN_LENGTH_FILTER_KEY = "SHORT_ALN";
