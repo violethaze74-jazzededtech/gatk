@@ -51,6 +51,13 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
     @Argument(fullName = "positions-only", doc = "Only match on position, ignoring alleles and annotations")
     Boolean POSITONS_ONLY = false;
 
+    @Argument(fullName = "allow-new-stars", doc = "Allow additional * alleles in actual if there is a corresponding deletion")
+    Boolean ALLOW_NEW_STARS = false;
+
+    //TODO: this should have a mutex wrt the above
+    @Argument(fullName = "allow-extra-alleles", doc = "Allow extra alleles in actual provided actual is a superset of expected")
+    Boolean ALLOW_EXTRA_ALLELES = false;
+
     @Override
     public boolean doDictionaryCrossValidation() {
         return false;
@@ -103,6 +110,9 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                 final VariantContext trimmed1 = trimAlleles(vc);
                 final VariantContext trimmed2 = trimAlleles(match);
 
+                final List<VariantContext> overlappingDels = variantContexts.stream().filter(v -> v.getStart() < vc.getStart() && v.overlaps(vc))
+                        .collect(Collectors.toList());
+
                 //do single-sample GVCF checks, including deletion trimming and dropping
                 if (isSingleSample) {
                     final List<Allele> gt1 = trimmed1.getGenotype(0).getAlleles();
@@ -110,8 +120,6 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
 
                     if (!gt1.get(0).equals(gt2.get(0)) || !gt1.get(1).equals(gt2.get(1))) {  //do use order here so we can check phasing
                         //this is okay if a star got corrected by dropping an upstream hom ref del
-                        final List<VariantContext> overlappingDels = variantContexts.stream().filter(v -> v.getStart() < vc.getStart() && v.overlaps(vc))
-                                .collect(Collectors.toList());
                         //could be dropped hom ref
                         if (overlappingDels.stream().anyMatch(v -> v.getGenotype(0).isHomRef())) {
                             if (!areAttributesEqual(vc.getAttributes(), match.getAttributes())) {
@@ -155,7 +163,7 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                     expected_trimmed = trimmed1;
                 }
                 try {
-                    if (!areVariantContextsEqualOrderIndependent(actual_trimmed, expected_trimmed)) {
+                    if (!areVariantContextsEqualOrderIndependent(actual_trimmed, expected_trimmed, overlappingDels)) {
                         throwOrWarn(new UserException("Variant contexts do not match: " + actual_trimmed.toStringDecodeGenotypes() + " versus " + expected_trimmed.toStringDecodeGenotypes()));
                     }
                 } catch (UserException e) {
@@ -166,22 +174,39 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
         }
     }
 
-    private boolean areVariantContextsEqualOrderIndependent(final VariantContext actual, final VariantContext expected) {
+    private boolean areVariantContextsEqualOrderIndependent(final VariantContext actual, final VariantContext expected,
+                                                            final List<VariantContext> overlappingDels) {
         if (!actual.getContig().equals(expected.getContig())) {
             return false;
         }
         if (actual.getStart() != expected.getStart()) {
             return false;
         }
-        if (actual.getEnd() != expected.getEnd()) {
+
+        //don't check end in case we're being lenient about alleles
+
+        if (!ALLOW_EXTRA_ALLELES && !actual.getID().equals(expected.getID())) {  //more alleles might mean more dbSNP matches
             return false;
         }
-        if (!actual.getID().equals(expected.getID())) {
-            return false;
-        }
-        if (!actual.getAlleles().equals(expected.getAlleles())) {
-            throwOrWarn(new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
-            + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles()));
+
+        if (!expected.getAlternateAlleles().stream().allMatch(a -> GATKVariantContextUtils.isAlleleInList(
+                expected.getReference(), a, actual.getReference(), actual.getAlternateAlleles()))) {
+            if (!ALLOW_EXTRA_ALLELES) {
+                if (!actual.getAlternateAlleles().stream().allMatch(a -> GATKVariantContextUtils.isAlleleInList(
+                        actual.getReference(), a, expected.getReference(), expected.getAlternateAlleles()))) {
+                    throwOrWarn(new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
+                            + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles()));
+                }
+            }
+            else if (ALLOW_NEW_STARS && actual.getAlleles().contains(Allele.SPAN_DEL) && !expected.getAlleles().contains(Allele.SPAN_DEL)) {
+                if (overlappingDels.size() == 0 || !overlappingDels.stream().anyMatch(vc -> vc.getSource().equals("actual"))) {
+                    throwOrWarn(new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
+                            + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles()));
+                }
+            } else {
+                throwOrWarn(new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
+                        + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles()));
+            }
         }
 
         if (IGNORE_ANNOTATIONS) {
