@@ -418,7 +418,7 @@ public final class CombineGVCFs extends MultiVariantWalkerGroupedOnStart {
             }
 
             vcfWriter.add(mergedVC);
-            prevPos = closingSpot;
+            prevPos = closingSpot;  //TODO: this should be the end of the variant just output, right???
             refAfterPrevPos = refNextBase;
         }
     }
