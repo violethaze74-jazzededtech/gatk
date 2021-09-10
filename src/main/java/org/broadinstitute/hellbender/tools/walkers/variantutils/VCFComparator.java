@@ -30,6 +30,9 @@ import java.util.stream.Collectors;
         programGroup = VariantEvaluationProgramGroup.class
 )
 public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
+    private boolean sampleCheckDone = false;
+    private boolean isSingleSample = true;
+
     @Argument(fullName = "warn-on-errors",
             shortName = "warn-on-errors",
             doc = "just emit warnings on errors instead of terminating the run at the first instance",
@@ -41,6 +44,12 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
 
     @Argument(fullName = "dp-change-allowed", doc = "Note that this is a signed change (actual - expected)")
     Integer DP_CHANGE = 0;
+
+    @Argument(fullName = "ignore-annotations", doc = "Only match on position and alleles, ignoring annotations")
+    Boolean IGNORE_ANNOTATIONS = false;
+
+    @Argument(fullName = "positions-only", doc = "Only match on position, ignoring alleles and annotations")
+    Boolean POSITONS_ONLY = false;
 
     @Override
     public boolean doDictionaryCrossValidation() {
@@ -56,7 +65,19 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
 
     @Override
     public void apply(final List<VariantContext> variantContexts, final ReferenceContext referenceContext, final List<ReadsContext> readsContexts) {
+        if (!sampleCheckDone) {
+            if (variantContexts.get(0).getGenotypes().size() > 1) {
+                isSingleSample = false;
+            }
+            sampleCheckDone = true;
+        }
 
+        /*if (variantContexts.size() == 1) {
+            final VariantContext vc = variantContexts.get(0);
+            if (vc.getPhredScaledQual() > 60.0 && vc.isBiallelic() && vc.getAttributeAsInt(VCFConstants.ALLELE_COUNT_KEY, 0) > 1) {
+                throwOrWarn(new UserException("Unmatched variant in " + vc.getSource() + " at position " + vc.getContig() + ":" + vc.getStart()));
+            }
+        }*/
 
         //ideally we have all variants overlapping a given position
         //if there's no actual for the expected (at the same position), see if the expected has an overlapping deletion
@@ -80,44 +101,51 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                 }
 
                 final VariantContext trimmed1 = trimAlleles(vc);
-                final List<Allele> gt1 = trimmed1.getGenotype(0).getAlleles();
-
                 final VariantContext trimmed2 = trimAlleles(match);
-                final List<Allele> gt2 = trimmed2.getGenotype(0).getAlleles();
 
-                if (!gt1.get(0).equals(gt2.get(0)) || !gt1.get(1).equals(gt2.get(1))) {  //do use order here so we can check phasing
-                    //this is okay if a star got corrected by dropping an upstream hom ref del
-                    final List<VariantContext> overlappingDels = variantContexts.stream().filter(v -> v.getStart() < vc.getStart() && v.overlaps(vc))
-                            .collect(Collectors.toList());
-                    //could be dropped hom ref
-                    if (overlappingDels.stream().anyMatch(v -> v.getGenotype(0).isHomRef())) {
-                        if (!areAttributesEqual(vc.getAttributes(), match.getAttributes())) {
-                            throwOrWarn(new UserException("INFO attributes do not match at " + vc.getContig() + ":" + vc.getStart()));
-                        }
-                        if (!areGenotypesEqual(trimmed1.getGenotype(0), trimmed2.getGenotype(0))) {
-                            throwOrWarn(new UserException("Genotypes do not match at " + vc.getContig() + ":" + vc.getStart()));
-                        }
-                        return;
-                    } else if (variantContexts.size() == 2 && gt1.contains(Allele.SPAN_DEL) && !gt2.contains(Allele.SPAN_DEL)) {
-                        return;  //there never was an overlapping deletion in the expected
-                    }
-                    else {
-                        if (overlappingDels.size() != 1) {  //there should be one overlapping that got trimmed and the other shouldn't overlap anymore
+                //do single-sample GVCF checks, including deletion trimming and dropping
+                if (isSingleSample) {
+                    final List<Allele> gt1 = trimmed1.getGenotype(0).getAlleles();
+                    final List<Allele> gt2 = trimmed2.getGenotype(0).getAlleles();
 
-                        throwOrWarn(new UserException("Genotype alleles do not match at " + vc.getContig() + ":" + vc.getStart()
-                                + ". " + vc.getSource() + " has " + trimmed1.getGenotype(0).toString() + " and " + match.getSource() + " has "
-                                + trimmed2.getGenotype(0).toString()));
-                        return;
-                        } else {
-                            final VariantContext overlapper = overlappingDels.get(0);
-                            final VariantContext trimmedOverlapper = trimAlleles(overlapper);
-                            if (overlapper.overlaps(vc) && !trimmedOverlapper.overlaps(vc)) {
-                                return;
+                    if (!gt1.get(0).equals(gt2.get(0)) || !gt1.get(1).equals(gt2.get(1))) {  //do use order here so we can check phasing
+                        //this is okay if a star got corrected by dropping an upstream hom ref del
+                        final List<VariantContext> overlappingDels = variantContexts.stream().filter(v -> v.getStart() < vc.getStart() && v.overlaps(vc))
+                                .collect(Collectors.toList());
+                        //could be dropped hom ref
+                        if (overlappingDels.stream().anyMatch(v -> v.getGenotype(0).isHomRef())) {
+                            if (!areAttributesEqual(vc.getAttributes(), match.getAttributes())) {
+                                throwOrWarn(new UserException("INFO attributes do not match at " + vc.getContig() + ":" + vc.getStart()));
                             }
-                        }
+                            if (!areGenotypesEqual(trimmed1.getGenotype(0), trimmed2.getGenotype(0))) {
+                                throwOrWarn(new UserException("Genotypes do not match at " + vc.getContig() + ":" + vc.getStart()));
+                            }
+                            return;
+                        } else if (variantContexts.size() == 2 && gt1.contains(Allele.SPAN_DEL) && !gt2.contains(Allele.SPAN_DEL)) {
+                            return;  //there never was an overlapping deletion in the expected
+                        } else {
+                            if (overlappingDels.size() != 1) {  //there should be one overlapping that got trimmed and the other shouldn't overlap anymore
 
+                                throwOrWarn(new UserException("Genotype alleles do not match at " + vc.getContig() + ":" + vc.getStart()
+                                        + ". " + vc.getSource() + " has " + trimmed1.getGenotype(0).toString() + " and " + match.getSource() + " has "
+                                        + trimmed2.getGenotype(0).toString()));
+                                return;
+                            } else {
+                                final VariantContext overlapper = overlappingDels.get(0);
+                                final VariantContext trimmedOverlapper = trimAlleles(overlapper);
+                                if (overlapper.overlaps(vc) && !trimmedOverlapper.overlaps(vc)) {
+                                    return;
+                                }
+                            }
+
+                        }
                     }
                 }
+                if (POSITONS_ONLY) {
+                    return;
+                }
+
+                //more rigorous checks
                 final VariantContext actual_trimmed, expected_trimmed;
                 if (trimmed1.getSource().equals("actual")) {
                     actual_trimmed = trimmed1;
@@ -152,7 +180,18 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
             return false;
         }
         if (!actual.getAlleles().equals(expected.getAlleles())) {
-            return false;
+            throwOrWarn(new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
+            + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles()));
+        }
+
+        if (IGNORE_ANNOTATIONS) {
+            return true;
+        }
+
+        if (Math.abs(actual.getPhredScaledQual() - expected.getPhredScaledQual()) > 0.001) {
+            if (!IGNORE_QUALS) {
+                throw new UserException("Qual scores differ by more than 0.001");
+            }
         }
 
         if (!areAttributesEqual(actual.getAttributes(), expected.getAttributes())) {
@@ -168,11 +207,7 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
         if (!actual.getFilters().equals(expected.getFilters())){
             return false;
         }
-        if (Math.abs(actual.getPhredScaledQual() - expected.getPhredScaledQual()) > 0.001) {
-            if (!IGNORE_QUALS) {
-                throw new UserException("Qual scores differ by more than 0.001");
-            }
-        }
+
 
         if (!areGenotypesEqual(actual.getGenotype(0), expected.getGenotype(0))) {
             throw new UserException("Genotypes are not equal: " + actual.getGenotype(0) + " versus " + expected.getGenotype(0));
