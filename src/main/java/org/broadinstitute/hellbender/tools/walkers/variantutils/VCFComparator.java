@@ -57,6 +57,15 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
     @Argument(fullName = "ignore-annotations", doc = "Only match on position and alleles, ignoring annotations")
     Boolean IGNORE_ANNOTATIONS = false;
 
+    @Argument(fullName = "ignore-genotype-annotations", doc = "Only match on genotype call")
+    Boolean IGNORE_GENOTYPE_ANNOTATIONS = false;
+
+    @Argument(fullName = "ignore-filters", doc = "Ignore filter status when comparing variants")
+    Boolean IGNORE_FILTERS = false;
+
+    @Argument(fullName = "ignore-attribute", doc = "Ignore INFO attributes with this key")
+    List<String> IGNORE_ATTRIBUTES = new ArrayList<>(5);
+
     @Argument(fullName = "positions-only", doc = "Only match on position, ignoring alleles and annotations")
     Boolean POSITONS_ONLY = false;
 
@@ -248,14 +257,16 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
         }
 
         if (!alleleNumberIsDifferent) {
-            if (actual.filtersWereApplied() != expected.filtersWereApplied()) {
-                return false;
-            }
-            if (actual.isFiltered() != expected.isFiltered()) {
-                return false;
-            }
-            if (!actual.getFilters().equals(expected.getFilters())) {
-                return false;
+            if (!IGNORE_FILTERS) {
+                if (actual.filtersWereApplied() != expected.filtersWereApplied()) {
+                    return false;
+                }
+                if (actual.isFiltered() != expected.isFiltered()) {
+                    return false;
+                }
+                if (!actual.getFilters().equals(expected.getFilters())) {
+                    return false;
+                }
             }
 
 
@@ -279,8 +290,8 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
         }
 
         if (actual.containsKey(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY)
-                &&!isAttributeValueEqual(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY, actual.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY),
-                expected.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY))) {
+                &&!isAttributeEqualDoubleSmart(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY, Double.parseDouble(actual.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY).toString()),
+                Double.parseDouble(expected.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY).toString()), 0.001)) {
             inbreedingCoeffIsDifferent = true;
         } else {
             inbreedingCoeffIsDifferent = false;
@@ -290,6 +301,11 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
            final Object expectedValue = exp.getValue();
             final String key = exp.getKey();
             if ( actual.containsKey(key) && actual.get(key) != null ) {
+                //we already checked these
+                if (key.equals(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY) || key.equals(VCFConstants.ALLELE_NUMBER_KEY)
+                || IGNORE_ATTRIBUTES.contains(key)) {
+                    continue;
+                }
                 final Object actualValue = actual.get(key);
                 if (expectedValue instanceof List && actualValue instanceof List) {
                     // both values are lists, compare element by element
@@ -301,7 +317,11 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                     }
                     for (int i = 0; i < expectedList.size(); i++) {
                         if (!isAttributeValueEqual(key, actualList.get(i), expectedList.get(i))) {
-                            return false;
+                            if (key.equals(VCFConstants.ALLELE_COUNT_KEY) || key.equals(GATKVCFConstants.MLE_ALLELE_COUNT_KEY)) {
+                                return isACEqualEnough(key, )
+                            } else {
+                                return false;
+                            }
                         }
                     }
                 } else {
@@ -309,7 +329,17 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                         if (annotationsThatVaryWithNoCalls.contains(key) && alleleNumberIsDifferent) {
                             continue;
                         } else {
-                            return false;
+                            if (key.equals(GATKVCFConstants.QUAL_BY_DEPTH_KEY)) {
+                                final double actualDouble = Double.parseDouble(actualValue.toString());
+                                final double expectedDouble = Double.parseDouble(expectedValue.toString());
+                                final double diff = Math.abs(expectedDouble - actualDouble);
+                                final double relativeDiff = diff / (expectedDouble);
+                                if (expectedDouble > 25.0 || relativeDiff < 0.01 || diff < 0.5) {  //25 is in the "jitter" zone
+                                    continue;
+                                } else {
+                                    return false;
+                                }
+                            }
                         }
                     }
                 }
@@ -330,6 +360,15 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
 
     }
 
+    private boolean isAttributeEqualDoubleSmart(final String key, final double actual, final double expected, final double tolerance) {
+        final double diff = Math.abs(actual-expected);
+        if (diff > tolerance) {
+            throwOrWarn(new UserException("Attribute " + key + " has difference " + diff + ", which is larger difference than allowed delta " + tolerance));
+            return false;
+        }
+        return true;
+    }
+
     private boolean areGenotypesEqual(final Genotype actual, final Genotype expected) {
         if (!actual.getSampleName().equals(expected.getSampleName())) {
             return false;
@@ -339,6 +378,12 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
         }
         if (!actual.getGenotypeString(false).equals(expected.getGenotypeString(false))){
             return false;
+        }
+        if (actual.isPhased() != expected.isPhased()) {
+            return false;
+        }
+        if (IGNORE_GENOTYPE_ANNOTATIONS) {
+            return true;
         }
         if (actual.hasDP() != expected.hasDP()) {
             return false;
@@ -372,9 +417,6 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
             return false;
         }
         if (actual.hasGQ() && (actual.getGQ() != expected.getGQ())) {
-            return false;
-        }
-        if (actual.isPhased() != expected.isPhased()) {
             return false;
         }
        if (actual.hasPL() != expected.hasPL()) {
