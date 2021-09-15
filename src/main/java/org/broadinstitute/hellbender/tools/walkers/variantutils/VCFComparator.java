@@ -278,7 +278,8 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
             alleleNumberIsDifferent = false;
         }
 
-        if (!isAttributeValueEqual(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY, actual.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY),
+        if (actual.containsKey(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY)
+                &&!isAttributeValueEqual(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY, actual.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY),
                 expected.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY))) {
             inbreedingCoeffIsDifferent = true;
         } else {
