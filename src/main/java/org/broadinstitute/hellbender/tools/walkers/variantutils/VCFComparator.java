@@ -6,8 +6,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.broadinstitute.barclay.argparser.Argument;
 import org.broadinstitute.barclay.argparser.BetaFeature;
 import org.broadinstitute.barclay.argparser.CommandLineProgramProperties;
-import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
-import org.broadinstitute.hellbender.cmdline.programgroups.StructuralVariantDiscoveryProgramGroup;
 import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
@@ -23,7 +21,10 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * input variants should be tagged "actual" or "expected" -- single sample ONLY
+ * A tool to allow for comparison of two single-sample GVCFs or multi-sample VCFs when some differences are expected
+ * input variants should be tagged "actual" or "expected"
+ *
+ * Reference blocks are not checked
  */
 @BetaFeature
 @CommandLineProgramProperties(
@@ -32,6 +33,11 @@ import java.util.stream.Collectors;
         programGroup = VariantEvaluationProgramGroup.class
 )
 public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
+    public static final String ALLOW_NEW_STARS_LONG_NAME = "allow-new-stars";
+    public static final String IGNORE_QUALS_LONG_NAME = "ignore-quals";
+    public static final String DP_CHANGE_ALLOWED_LONG_NAME = "dp-change-allowed";
+    public static final String POSITIONS_ONLY_LONG_NAME = "positions-only";
+
     private boolean sampleCheckDone = false;
     private boolean isSingleSample = true;
     private boolean alleleNumberIsDifferent = false;
@@ -49,66 +55,70 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
             optional = true)
     Boolean WARN_ON_ERROR = false;
 
-    @Argument(fullName = "ignore-quals", optional = true)
+    @Argument(fullName = IGNORE_QUALS_LONG_NAME, optional = true, mutex={POSITIONS_ONLY_LONG_NAME})
     Boolean IGNORE_QUALS = false;
 
-    @Argument(fullName = "dp-change-allowed", doc = "Note that this is a signed change (actual - expected)")
+    @Argument(fullName = "good-qual-threshold", optional = true, doc = "Variants with QUAL at or above this value are considered high quality and should appear in both files")
+    Double GOOD_QUAL_THRESHOLD = 60.0;
+
+    @Argument(fullName = DP_CHANGE_ALLOWED_LONG_NAME, optional = true, doc = "Note that this is a signed change (actual - expected)", mutex={POSITIONS_ONLY_LONG_NAME})
     Integer DP_CHANGE = 0;
 
-    @Argument(fullName = "ignore-annotations", doc = "Only match on position and alleles, ignoring annotations")
+    @Argument(fullName = "ignore-annotations", optional = true, doc = "Only match on position and alleles, ignoring all INFO annotations", mutex={POSITIONS_ONLY_LONG_NAME})
     Boolean IGNORE_ANNOTATIONS = false;
 
-    @Argument(fullName = "ignore-genotype-annotations", doc = "Only match on genotype call")
+    @Argument(fullName = "ignore-genotype-annotations", optional = true, doc = "Only match on genotype call, ignoring all FORMAT annotations", mutex={POSITIONS_ONLY_LONG_NAME})
     Boolean IGNORE_GENOTYPE_ANNOTATIONS = false;
 
-    @Argument(fullName = "ignore-filters", doc = "Ignore filter status when comparing variants")
+    @Argument(fullName = "ignore-filters", optional = true, doc = "Ignore filter status when comparing variants", mutex={POSITIONS_ONLY_LONG_NAME})
     Boolean IGNORE_FILTERS = false;
 
-    @Argument(fullName = "ignore-attribute", doc = "Ignore INFO attributes with this key")
+    @Argument(fullName = "ignore-attribute", optional = true, doc = "Ignore INFO attributes with this key", mutex={POSITIONS_ONLY_LONG_NAME})
     List<String> IGNORE_ATTRIBUTES = new ArrayList<>(5);
 
-    @Argument(fullName = "positions-only", doc = "Only match on position, ignoring alleles and annotations")
-    Boolean POSITONS_ONLY = false;
+    @Argument(fullName = POSITIONS_ONLY_LONG_NAME, optional = true, doc = "Only match on position, ignoring alleles and annotations", mutex={})
+    Boolean POSITIONS_ONLY = false;
 
-    @Argument(fullName = "allow-new-stars", doc = "Allow additional * alleles in actual if there is a corresponding deletion")
+    @Argument(fullName = ALLOW_NEW_STARS_LONG_NAME, optional = true, doc = "Allow additional * alleles in actual if there is a corresponding deletion", mutex={POSITIONS_ONLY_LONG_NAME})
     Boolean ALLOW_NEW_STARS = false;
 
-    //TODO: this should have a mutex wrt the above
-    @Argument(fullName = "allow-extra-alleles", doc = "Allow extra alleles in actual provided actual is a superset of expected")
+    @Argument(fullName = "allow-extra-alleles", optional = true, doc = "Allow extra alleles in actual provided actual is a superset of expected", mutex={ALLOW_NEW_STARS_LONG_NAME, POSITIONS_ONLY_LONG_NAME})
     Boolean ALLOW_EXTRA_ALLELES = false;
 
-    @Argument(fullName = "allow-missing-stars", doc = "Allow extra * in expected if actual has no corresponding deletions")
+    @Argument(fullName = "allow-missing-stars", optional = true, doc = "Allow extra * in expected if actual has no corresponding deletions")
     Boolean ALLOW_MISSING_STARS = false;
 
     @Override
     public boolean doDictionaryCrossValidation() {
         return false;
-    }
+    }  //speed things up a bit
 
     @Override
     public void onTraversalStart() {
         if (getDrivingVariantsFeatureInputs().size() != 2) {
-            throw new GATKException("VCFComparator expects exactly two inputs -- one actual and one expected.");
+            throw new UserException.BadInput("VCFComparator expects exactly two inputs -- one actual and one expected.");
         }
+        final List<FeatureInput<VariantContext>> expected = getDrivingVariantsFeatureInputs().stream().filter(file -> file.getName().equals("expected")).collect(Collectors.toList());
+        if (expected.size() != 1) {
+            throw new UserException.BadInput("Tool requires exactly one expected input file");
+        }
+
+       isSingleSample = getSamplesForVariants().size() == 1 ? true : false;  //if either expected or actual has more than one sample then we're not single-sample
     }
 
     @Override
     public void apply(final List<VariantContext> variantContexts, final ReferenceContext referenceContext, final List<ReadsContext> readsContexts) {
-        if (!sampleCheckDone) {
-            if (variantContexts.get(0).getGenotypes().size() > 1) {
-                isSingleSample = false;
-            }
-            sampleCheckDone = true;
+        if (isSingleSample && !variantContexts.get(0).getAlleles().contains(Allele.NON_REF_ALLELE)) {
+            throw new UserException.BadInput("Single-sample mode expects two GVCFs with <NON_REF> data for comparison");
         }
-
-        /*if (variantContexts.size() == 1) {
+        if (variantContexts.size() == 1) {
             final VariantContext vc = variantContexts.get(0);
-            if (vc.getPhredScaledQual() > 60.0 && vc.isBiallelic() && vc.getAttributeAsInt(VCFConstants.ALLELE_COUNT_KEY, 0) > 1) {
+            if (vc.getPhredScaledQual() > GOOD_QUAL_THRESHOLD && vc.isBiallelic() && vc.getAttributeAsInt(VCFConstants.ALLELE_COUNT_KEY, 0) > 1) {
                 throwOrWarn(new UserException("Unmatched variant in " + vc.getSource() + " at position " + vc.getContig() + ":" + vc.getStart()));
             }
-        }*/
+        }
 
-        //ideally we have all variants overlapping a given position
+        //here we have all variants overlapping a given position
         //if there's no actual for the expected (at the same position), see if the expected has an overlapping deletion
         for (final VariantContext vc : variantContexts) {
             if (vc.getSource().equals("actual")) {  //there may be more expected than actual variants, but only compare once
@@ -151,14 +161,15 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                                 throwOrWarn(new UserException("Genotypes do not match at " + vc.getContig() + ":" + vc.getStart()));
                             }
                             return;
-                        } else if (variantContexts.size() == 2 && gt1.contains(Allele.SPAN_DEL) && !gt2.contains(Allele.SPAN_DEL)) {
+                        } else if (overlappingDels.size() == 0 && gt1.contains(Allele.SPAN_DEL) && !gt2.contains(Allele.SPAN_DEL)) {
                             return;  //there never was an overlapping deletion in the expected
                         } else {
-                            if (overlappingDels.size() != 1) {  //there should be one overlapping that got trimmed and the other shouldn't overlap anymore
-
-                                throwOrWarn(new UserException("Genotype alleles do not match at " + vc.getContig() + ":" + vc.getStart()
-                                        + ". " + vc.getSource() + " has " + trimmed1.getGenotype(0).toString() + " and " + match.getSource() + " has "
-                                        + trimmed2.getGenotype(0).toString()));
+                            if (overlappingDels.stream().anyMatch(v -> v.getSource().equals("actual"))) {  //there should be one overlapping that got trimmed and the other shouldn't overlap anymore
+                                if (!ALLOW_MISSING_STARS) {
+                                    throwOrWarn(new UserException("Genotype alleles do not match at " + vc.getContig() + ":" + vc.getStart()
+                                            + ".  Actual is missing *. " + vc.getSource() + " has " + trimmed1.getGenotype(0).toString() + " and " + match.getSource() + " has "
+                                            + trimmed2.getGenotype(0).toString()));
+                                }
                                 return;
                             } else {
                                 final VariantContext overlapper = overlappingDels.get(0);
@@ -171,7 +182,7 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                         }
                     }
                 }
-                if (POSITONS_ONLY) {
+                if (POSITIONS_ONLY) {
                     return;
                 }
 
@@ -286,7 +297,7 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
         final Set<String> expectedKeys = new LinkedHashSet<>(expected.keySet());
 
         //do a precheck on AN because then we can't expect the rest of the annotations to match
-        if (!isAttributeValueEqual(VCFConstants.ALLELE_NUMBER_KEY, actual.get(VCFConstants.ALLELE_NUMBER_KEY),
+        if (actual.containsKey(VCFConstants.ALLELE_NUMBER_KEY) && !isAttributeValueEqual(VCFConstants.ALLELE_NUMBER_KEY, actual.get(VCFConstants.ALLELE_NUMBER_KEY),
                 expected.get(VCFConstants.ALLELE_NUMBER_KEY))) {
             alleleNumberIsDifferent = true;
         } else {
@@ -359,6 +370,14 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
         return true;
     }
 
+
+    /**
+     *
+     * @param key
+     * @param actual    input VariantContext containing key
+     * @param expected  input VariantContext containing key
+     * @return
+     */
     private boolean isAttributeValueEqual(final String key, final Object actual, final Object expected) {
         if (!actual.toString().equals(expected.toString())) {
             throwOrWarn(new UserException("Variant contexts have different attribute values for " + key + ": actual has " + actual.toString()
@@ -494,11 +513,11 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                 if (genotype.isHomRef()) {
                     continue;
                 }
-                if (passesGnomadAdjCriteria(genotype)) {
-                    return true;
+                if (!passesGnomadAdjCriteria(genotype)) {
+                    return false;
                 }
             }
-            return false;
+            return true;
         }
     }
 
