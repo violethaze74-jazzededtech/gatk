@@ -201,19 +201,16 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                     actual_trimmed = trimmed2;
                     expected_trimmed = trimmed1;
                 }
+
                 try {
-                    if (!areVariantContextsEqualOrderIndependent(actual_trimmed, expected_trimmed, overlappingDels) && !alleleNumberIsDifferent
-                            && !expected_trimmed.getGenotypes().stream().anyMatch(g -> g.getGQ() < 20)) {
-                        if (!MUTE_DIFFS || !(alleleNumberIsDifferent || inbreedingCoeffIsDifferent)) {
-                            throwOrWarn(new UserException("Variant contexts do not match: " + actual_trimmed.toStringDecodeGenotypes() + " versus " + expected_trimmed.toStringDecodeGenotypes()));
-                        }
-                    }
+                    areVariantContextsEqualOrderIndependent(actual_trimmed, expected_trimmed, overlappingDels);
                 } catch (UserException e) {
                     final boolean hasLowQualityGenotype = expected_trimmed.getGenotypes().stream().anyMatch(g -> g.getGQ() < 20);
                     if (!MUTE_DIFFS || !(alleleNumberIsDifferent || inbreedingCoeffIsDifferent || hasLowQualityGenotype)) {
-                        throwOrWarn(new UserException("Variant contexts do not match at " + actual_trimmed.getContig() + ":" + actual_trimmed.getStart(), e));
+                        throwOrWarn(e);
                     }
                 }
+
                 if (alleleNumberIsDifferent && !MUTE_DIFFS) {
                     logger.warn("Observed allele number differed at position " + vc.getContig() + ":" + vc.getStart());
                 }
@@ -227,41 +224,41 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
     private boolean areVariantContextsEqualOrderIndependent(final VariantContext actual, final VariantContext expected,
                                                             final List<VariantContext> overlappingDels) {
         if (!actual.getContig().equals(expected.getContig())) {
-            return false;
+            throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException("contigs differ for VCs"));
         }
         if (actual.getStart() != expected.getStart()) {
-            return false;
+            throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException("start positions differ for VCs"));
         }
 
         //don't check end in case we're being lenient about alleles
 
         if (!ALLOW_EXTRA_ALLELES && !actual.getID().equals(expected.getID())) {  //more alleles might mean more dbSNP matches
-            return false;
+            throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException("dbsnp IDs differ for VCs"));
         }
 
         if (!expected.getAlternateAlleles().stream().allMatch(a -> GATKVariantContextUtils.isAlleleInList(
                 expected.getReference(), a, actual.getReference(), actual.getAlternateAlleles()))) {
             if (!ALLOW_EXTRA_ALLELES && !actual.getAlternateAlleles().stream().allMatch(a -> GATKVariantContextUtils.isAlleleInList(
                     actual.getReference(), a, expected.getReference(), expected.getAlternateAlleles()))) {
-                throwOrWarn(new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
-                        + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles()));
+                throw new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
+                        + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles());
 
             } else if (ALLOW_NEW_STARS && actual.getAlleles().contains(Allele.SPAN_DEL) && !expected.getAlleles().contains(Allele.SPAN_DEL)) {
                 if (overlappingDels.size() == 0 || !overlappingDels.stream().anyMatch(vc -> vc.getSource().equals("actual"))) {
-                    throwOrWarn(new UserException("Actual has new unmatched * allele. Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
-                            + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles()));
+                    throw new UserException("Actual has new unmatched * allele. Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
+                            + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles());
                 }
                 //this is a GenomicsDB/CombineGVCFs bug -- there is an overlapping deletion and * should be output, but those tools don't account for multiple haplotypes and upstream variant "ends" the deletion
             } else if (ALLOW_MISSING_STARS && expected.getAlleles().contains(Allele.SPAN_DEL) && !actual.getAlleles().contains(Allele.SPAN_DEL)) {
                 final Set<Allele> remainder = new LinkedHashSet<>(expected.getAlleles());
                 remainder.removeAll(actual.getAlleles());
                 if (remainder.size() > 1 || !remainder.contains(Allele.SPAN_DEL)) {
-                    throwOrWarn(new UserException("Actual missing * allele. Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
-                            + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles()));
+                    throw new UserException("Actual missing * allele. Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
+                            + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles());
                 }
             } else {
-                throwOrWarn(new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
-                        + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles()));
+                throw new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
+                        + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles());
             }
         }
 
@@ -280,7 +277,7 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
             attributesAreEqual = areAttributesEqual(actual.getAttributes(), expected.getAttributes(), actual.getAlternateAlleles(), expected.getAlternateAlleles(), expected.getPhredScaledQual());
         } catch (UserException e) {
             attributesAreEqual = false;
-            throwOrWarn(wrapWithPosition(expected.getContig() ,expected.getStart() , e));
+            throw wrapWithPosition(expected.getContig() ,expected.getStart() , e);
         }
         if (!attributesAreEqual) {
             return false;
@@ -289,13 +286,13 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
         if (!alleleNumberIsDifferent) {
             if (!IGNORE_FILTERS) {
                 if (actual.filtersWereApplied() != expected.filtersWereApplied()) {
-                    return false;
+                    throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException(" filters were not applied to both variants"));
                 }
                 if (actual.isFiltered() != expected.isFiltered()) {
-                    return false;
+                    throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException(" one variant has a filter and one is \".\""));
                 }
                 if (!actual.getFilters().equals(expected.getFilters())) {
-                    return false;
+                    throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException("variants have different filters"));
                 }
             }
 
@@ -328,8 +325,20 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
 
         if (actual.containsKey(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY)) {
             try {
-                inbreedingCoeffIsDifferent = !isAttributeEqualDoubleSmart(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY, Double.parseDouble(actual.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY).toString()),
+                inbreedingCoeffIsDifferent = !isAttributeEqualDoubleSmart(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY,
+                        Double.parseDouble(actual.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY).toString()),
                         Double.parseDouble(expected.get(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY).toString()), 0.001);
+            } catch (UserException e) {
+                inbreedingCoeffIsDifferent = true;
+                throw e;
+            }
+        }
+
+        if (actual.containsKey(GATKVCFConstants.AS_INBREEDING_COEFFICIENT_KEY) && !(actual.get(GATKVCFConstants.AS_INBREEDING_COEFFICIENT_KEY) instanceof List)) {
+            try {
+                inbreedingCoeffIsDifferent = !isAttributeEqualDoubleSmart(GATKVCFConstants.AS_INBREEDING_COEFFICIENT_KEY,
+                        Double.parseDouble(actual.get(GATKVCFConstants.AS_INBREEDING_COEFFICIENT_KEY).toString()),
+                        Double.parseDouble(expected.get(GATKVCFConstants.AS_INBREEDING_COEFFICIENT_KEY).toString()), 0.001);
             } catch (UserException e) {
                 inbreedingCoeffIsDifferent = true;
                 throw e;
@@ -341,7 +350,9 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
             final String key = exp.getKey();
             if (actual.containsKey(key) && actual.get(key) != null) {
                 //we already checked these
-                if (key.equals(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY) || key.equals(VCFConstants.ALLELE_NUMBER_KEY)
+                if (key.equals(GATKVCFConstants.INBREEDING_COEFFICIENT_KEY)
+                        || key.equals(VCFConstants.ALLELE_NUMBER_KEY)
+                        || (key.equals(GATKVCFConstants.AS_INBREEDING_COEFFICIENT_KEY) && !(expected.get(key) instanceof List))
                         || IGNORE_ATTRIBUTES.contains(key)) {
                     continue;
                 }
@@ -359,6 +370,12 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                                 expectedList, actualAlts, expectedAlts);
                     }
                     for (int i = 0; i < expectedList.size(); i++) {
+                        if (key.equals(GATKVCFConstants.AS_INBREEDING_COEFFICIENT_KEY)) {
+                            return isAttributeEqualDoubleSmart(GATKVCFConstants.AS_INBREEDING_COEFFICIENT_KEY,
+                                    Double.parseDouble(actualList.get(i).toString()),
+                                    Double.parseDouble(expectedList.get(i).toString()),
+                                    0.001);
+                        }
                         if (!isAttributeValueEqual(key, actualList.get(i), expectedList.get(i))) {
                             return false;
                         }
@@ -413,8 +430,8 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
      */
     private boolean isAttributeValueEqual(final String key, final Object actual, final Object expected) {
         if (!actual.toString().equals(expected.toString())) {
-            throwOrWarn(new UserException("Variant contexts have different attribute values for " + key + ": actual has " + actual.toString()
-                    + " and expected has " + expected.toString()));
+            throw new UserException("Variant contexts have different attribute values for " + key + ": actual has " + actual.toString()
+                    + " and expected has " + expected.toString());
         }
         return actual.toString().equals(expected.toString());
 
@@ -551,11 +568,11 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                 if (genotype.isHomRef()) {
                     continue;
                 }
-                if (!passesGnomadAdjCriteria(genotype)) {
-                    return false;
+                if (passesGnomadAdjCriteria(genotype)) {
+                    return true;
                 }
             }
-            return true;
+            return false;
         }
     }
 
@@ -574,16 +591,16 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
             final int[] ad = g.getAD();
             final double alleleBalance;
             if (g.isHetNonRef()) {
-                alleleBalance = ad[2] / ((double) ad[1]);
+                alleleBalance = ad[2] / ((double) ad[1] + ad[2]);
 
             } else {
-                alleleBalance = ad[1] / ((double) ad[0]);
+                alleleBalance = ad[1] / ((double) ad[0] + ad[1]);
             }
-            if (alleleBalance < 0.2 || alleleBalance > 0.8) {
-                return false;
+            if (alleleBalance >= 0.2 && alleleBalance <= 0.8) {  //TODO: this isn't super robust
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     private boolean isACEqualEnough(final String key, final List<Object> actualList, final List<Object> expectedList,
