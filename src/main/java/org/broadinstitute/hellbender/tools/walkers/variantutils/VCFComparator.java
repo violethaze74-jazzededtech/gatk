@@ -369,7 +369,7 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                         valueIsEqual =  isAttributeValueEqual(key, actualValue, expectedValue);
                     } catch (UserException e) {
                         valueIsEqual = false;
-                        throwOrWarn(e);
+                        throw e;
                     }
                     if (!valueIsEqual) {
                         if (annotationsThatVaryWithNoCalls.contains(key) && alleleNumberIsDifferent) {
