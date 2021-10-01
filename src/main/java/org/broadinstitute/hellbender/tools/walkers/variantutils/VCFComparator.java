@@ -38,7 +38,6 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
     public static final String DP_CHANGE_ALLOWED_LONG_NAME = "dp-change-allowed";
     public static final String POSITIONS_ONLY_LONG_NAME = "positions-only";
 
-    private boolean sampleCheckDone = false;
     private boolean isSingleSample = true;
     private boolean alleleNumberIsDifferent = false;
     private boolean inbreedingCoeffIsDifferent = false;
@@ -59,7 +58,7 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
     Boolean IGNORE_QUALS = false;
 
     @Argument(fullName = "good-qual-threshold", optional = true, doc = "Variants with QUAL at or above this value are considered high quality and should appear in both files")
-    Double GOOD_QUAL_THRESHOLD = 60.0;
+    Double GOOD_QUAL_THRESHOLD = 100.0;
 
     @Argument(fullName = DP_CHANGE_ALLOWED_LONG_NAME, optional = true, doc = "Note that this is a signed change (actual - expected)", mutex={POSITIONS_ONLY_LONG_NAME})
     Integer DP_CHANGE = 0;
@@ -85,7 +84,7 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
     @Argument(fullName = "allow-extra-alleles", optional = true, doc = "Allow extra alleles in actual provided actual is a superset of expected", mutex={ALLOW_NEW_STARS_LONG_NAME, POSITIONS_ONLY_LONG_NAME})
     Boolean ALLOW_EXTRA_ALLELES = false;
 
-    @Argument(fullName = "allow-missing-stars", optional = true, doc = "Allow extra * in expected if actual has no corresponding deletions")
+    @Argument(fullName = "allow-missing-stars", optional = true, doc = "Allow missing * in actual if actual has no corresponding deletions")
     Boolean ALLOW_MISSING_STARS = false;
 
     @Argument(fullName = "mute-acceptable-diffs", optional = true, doc = "Suppress warnings or exceptions for differences that are consequences of low quality genotypes or AN discrepancies")
@@ -93,6 +92,9 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
 
     @Argument(fullName = "ignore-hom-ref-attributes", optional = true, doc = "Skip attribute comparison for homozygous reference genotypes")
     Boolean IGNORE_HOM_REF_ATTRIBUTES = false;
+
+    @Argument(fullName = "ignore-dbsnp-ids", optional = true)
+    Boolean IGNORE_DBSNP = false;
 
     @Override
     public boolean doDictionaryCrossValidation() {
@@ -119,7 +121,11 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
         }
         if (variantContexts.size() == 1) {
             final VariantContext vc = variantContexts.get(0);
-            if (vc.getPhredScaledQual() > GOOD_QUAL_THRESHOLD && vc.isBiallelic() && vc.getAttributeAsInt(VCFConstants.ALLELE_COUNT_KEY, 0) > 1) {
+            if (!MUTE_DIFFS) {
+                throwOrWarn(new UserException("Unmatched variant in " + vc.getSource() + " at position " + vc.getContig() + ":" + vc.getStart()));
+            //low coverage sites will have QUAL for singleton hom-vars boosted because of GQ0 hom-refs
+            } else if ((vc.getPhredScaledQual() > GOOD_QUAL_THRESHOLD)
+                && (vc.getAttributeAsInt(VCFConstants.DEPTH_KEY,0)/(double)vc.getAttributeAsInt(VCFConstants.ALLELE_NUMBER_KEY,0)) > 5) {
                 throwOrWarn(new UserException("Unmatched variant in " + vc.getSource() + " at position " + vc.getContig() + ":" + vc.getStart()));
             }
         }
@@ -135,6 +141,7 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                     && !vc.getGenotype(0).getAlleles().contains(Allele.SPAN_DEL)) {
                 throwOrWarn(new UserException("Apparent unmatched high quality variant in " + vc.getSource() + " at " + vc.getContig() + ":" + vc.getStart()));
             } else {
+                //matches should include the current variant vc
                 if (!isHighQuality(vc) || (matches.size() < 2 && vc.getGenotype(0).getAlleles().contains(Allele.SPAN_DEL))) { //TODO: check * genotypes somehow
                     return;
                 }
@@ -232,10 +239,6 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
 
         //don't check end in case we're being lenient about alleles
 
-        if (!ALLOW_EXTRA_ALLELES && !actual.getID().equals(expected.getID())) {  //more alleles might mean more dbSNP matches
-            throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException("dbsnp IDs differ for VCs"));
-        }
-
         if (!expected.getAlternateAlleles().stream().allMatch(a -> GATKVariantContextUtils.isAlleleInList(
                 expected.getReference(), a, actual.getReference(), actual.getAlternateAlleles()))) {
             if (!ALLOW_EXTRA_ALLELES && !actual.getAlternateAlleles().stream().allMatch(a -> GATKVariantContextUtils.isAlleleInList(
@@ -260,6 +263,9 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                 throw new UserException("Alleles are mismatched at " + actual.getContig() + ":" + actual.getStart() + ": actual has "
                         + actual.getAlternateAlleles() + " and expected has " + expected.getAlternateAlleles());
             }
+        }
+        if (!IGNORE_DBSNP && !actual.getID().equals(expected.getID())) {  //more alleles might mean more dbSNP matches
+            throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException("dbsnp IDs differ for VCs"));
         }
 
         if (IGNORE_ANNOTATIONS) {
@@ -288,11 +294,9 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                 if (actual.filtersWereApplied() != expected.filtersWereApplied()) {
                     throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException(" filters were not applied to both variants"));
                 }
-                if (actual.isFiltered() != expected.isFiltered()) {
-                    throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException(" one variant has a filter and one is \".\""));
-                }
                 if (!actual.getFilters().equals(expected.getFilters())) {
-                    throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException("variants have different filters"));
+                    throw wrapWithPosition(expected.getContig(), expected.getStart(), new UserException("variants have different filters: expected has "
+                    + (expected.getFilters().isEmpty() ? "PASS" : expected.getFilters()) + " and actual has " + actual.getFilters()));
                 }
             }
 
@@ -380,40 +384,50 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
                             return false;
                         }
                     }
-                } else {
+                } else {  //if not list
                     boolean valueIsEqual;
                     try {
                         valueIsEqual =  isAttributeValueEqual(key, actualValue, expectedValue);
                     } catch (UserException e) {
                         valueIsEqual = false;
-                        throw e;
-                    }
-                    if (!valueIsEqual) {
-                        if (annotationsThatVaryWithNoCalls.contains(key) && alleleNumberIsDifferent) {
-                            continue;
-                        } else {
-                            if (key.equals(GATKVCFConstants.QUAL_BY_DEPTH_KEY)) {
-                                final double actualDouble = Double.parseDouble(actualValue.toString());
-                                final double expectedDouble = Double.parseDouble(expectedValue.toString());
-                                final double diff = Math.abs(expectedDouble - actualDouble);
-                                final double relativeDiff = diff / (expectedDouble);
-                                if (expectedDouble > 25.0 || relativeDiff < 0.01 || diff < 0.5 ////25 is in the "jitter" zone
-                                        || !isAttributeValueEqual(VCFConstants.DEPTH_KEY, actual.get(VCFConstants.DEPTH_KEY), expected.get(VCFConstants.DEPTH_KEY))
-                                        || qualByDepthWillHaveJitter(expectedQual, Integer.parseInt(expected.get(VCFConstants.DEPTH_KEY).toString()))) {  //QD won't match if DP doesn't
-                                    //TODO: split out the messages because these are pretty difference
-                                    if (!MUTE_DIFFS) {
-                                        logger.warn("QD difference is within expected tolerances");
+                        if (!valueIsEqual) {
+                            if (annotationsThatVaryWithNoCalls.contains(key) && alleleNumberIsDifferent) {
+                                continue;
+                            } else {
+                                if (key.equals(GATKVCFConstants.QUAL_BY_DEPTH_KEY) || key.equals(GATKVCFConstants.AS_QUAL_BY_DEPTH_KEY)) {
+                                    final double actualDouble = Double.parseDouble(actualValue.toString());
+                                    final double expectedDouble = Double.parseDouble(expectedValue.toString());
+                                    final int expectedDP = Integer.parseInt(expected.get(VCFConstants.DEPTH_KEY).toString());
+                                    if (qualByDepthDifferenceIsAcceptable(actualDouble, expectedDouble, expectedQual, expectedDP)) {  //QD won't match if DP doesn't
+                                        if (!MUTE_DIFFS) {
+                                            logger.warn(key + " difference is within expected tolerances");
+                                        }
+                                        continue;
+                                    } else {
+                                        final boolean isDepthEqual;
+                                        try {
+                                            isDepthEqual = isAttributeValueEqual(VCFConstants.DEPTH_KEY, actual.get(VCFConstants.DEPTH_KEY), expected.get(VCFConstants.DEPTH_KEY));
+                                        } catch (UserException e2) {
+                                            //check expected QD against expected AS_QD because in a few cases actual is wrong
+                                            if (!qualByDepthDifferenceIsAcceptable(Double.parseDouble(actual.get(GATKVCFConstants.QUAL_BY_DEPTH_KEY).toString()),
+                                            Double.parseDouble(actual.get(GATKVCFConstants.AS_QUAL_BY_DEPTH_KEY).toString()), expectedQual, expectedDP)) {
+                                                logger.warn(key + " difference (actual = " + actual.get(key) + " versus expected:"
+                                                        + expected.get(key) + " is larger than expected, but so is DP (actual="
+                                                        + actual.get(VCFConstants.DEPTH_KEY) + " versus expected:" + expected.get(VCFConstants.DEPTH_KEY) + ")");
+                                            }
+                                            continue;
+                                        }
+                                        if (isDepthEqual) {
+                                            throw e;
+                                        }
                                     }
-                                    continue;
-                                } else {
-                                    return false;
                                 }
                             }
-                        }
+                        throw e;
+                    }
+
                     }
                 }
-            } else {
-                // it's ok if there are new things in actual
             }
             expectedKeys.remove(key);
         }
@@ -605,7 +619,8 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
 
     private boolean isACEqualEnough(final String key, final List<Object> actualList, final List<Object> expectedList,
                                     final List<Allele> actualAlts, final List<Allele> expectedAlts) {
-        for (int i = 0; i < actualList.size(); i++) {
+        //trimming may drop AC=0 alts, but GATK convention is to put them last, so that shouldn't be an issue
+        for (int i = 0; i < actualAlts.size(); i++) {
             if (actualAlts.get(i).equals(Allele.SPAN_DEL)) {
                 continue;
             }
@@ -626,5 +641,12 @@ public class VCFComparator extends MultiVariantWalkerGroupedByOverlap {
             return true;
         }
         return false;
+    }
+
+    private boolean qualByDepthDifferenceIsAcceptable(final double actual, final double expected, final double expectedQual, final int expectedDP) {
+        final double diff = Math.abs(expected - actual);
+        final double relativeDiff = diff / (expected);
+        return expected > 25.0 || relativeDiff < 0.01 || diff < 0.5 ////25 is in the "jitter" zone
+                || qualByDepthWillHaveJitter(expectedQual, expectedDP);
     }
 }
