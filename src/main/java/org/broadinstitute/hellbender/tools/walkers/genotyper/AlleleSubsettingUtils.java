@@ -447,39 +447,6 @@ public final class AlleleSubsettingUtils {
         return indexMapping;
     }
 
-    public static int[] getIndexesOfRelevantAlleles(final List<Allele> remappedAlleles, final List<Allele> targetAlleles, final int position, final Genotype g) {
-        Utils.nonEmpty(remappedAlleles);
-        Utils.nonEmpty(targetAlleles);
-
-        final int[] indexMapping = new int[targetAlleles.size()];
-
-        // the reference likelihoods should always map to each other (even if the alleles don't)
-        indexMapping[0] = 0;
-
-        for ( int i = 1; i < targetAlleles.size(); i++ ) {
-            // if there's more than 1 spanning deletion (*) allele then we need to use the best one
-            if (targetAlleles.get(i) == Allele.SPAN_DEL && g.hasPL()) {
-                final int occurrences = Collections.frequency(remappedAlleles, Allele.SPAN_DEL);
-                if (occurrences > 1) {
-                    final int indexOfBestDel = indexOfBestDel(remappedAlleles, g.getPL(), g.getPloidy());
-                    if (indexOfBestDel == -1) {
-                        throw new IllegalArgumentException("At position " + position + " targetAlleles contains a spanning deletion, but remappedAlleles does not.");
-                    }
-                    indexMapping[i] = indexOfBestDel;
-                    continue;
-                }
-            }
-
-            final int indexOfRemappedAllele = remappedAlleles.indexOf(targetAlleles.get(i));
-            if (indexOfRemappedAllele == -1) {
-                throw new IllegalArgumentException("At position " + position + " targetAlleles contains a " + targetAlleles.get(i) + " allele, but remappedAlleles does not.");
-            }
-            indexMapping[i] = indexOfRemappedAllele;
-        }
-
-        return indexMapping;
-    }
-
     /**
      * Returns the index of the best spanning deletion allele based on AD counts
      *
@@ -494,7 +461,8 @@ public final class AlleleSubsettingUtils {
 
         for ( int i = 0; i < alleles.size(); i++ ) {
             if ( alleles.get(i) == Allele.SPAN_DEL ) {
-                final int homAltIndex = findHomIndex(GL_CALCS.getInstance(ploidy, alleles.size()), i, ploidy);
+                //In the canonical order, the homozygous genotype of the ith allele is immediately followed by the first genotype containing the (i+1)th allele.
+                final int homAltIndex = (int) GenotypeLikelihoodCalculators.numberOfGenotypesBeforeAllele(ploidy, i +1) - 1;
                 final int PL = PLs[homAltIndex];
                 if ( PL < bestPL ) {
                     bestIndex = i;
@@ -504,25 +472,6 @@ public final class AlleleSubsettingUtils {
         }
 
         return bestIndex;
-    }
-
-    /** //TODO simplify these methods
-     * Returns the index of the PL that represents the homozygous genotype of the given i'th allele
-     *
-     * @param i           the index of the allele with the list of alleles
-     * @param ploidy      the ploidy of the sample
-     * @return the hom index
-     */
-    private static int findHomIndex(final GenotypeLikelihoodCalculator calculator, final int i, final int ploidy) {
-        // some quick optimizations for the common case
-        if ( ploidy == 2 )
-            return GenotypeLikelihoods.calculatePLindex(i, i);
-        if ( ploidy == 1 )
-            return i;
-
-        final int[] alleleIndexes = new int[ploidy];
-        Arrays.fill(alleleIndexes, i);
-        return calculator.allelesToIndex(alleleIndexes);
     }
 
     /**
