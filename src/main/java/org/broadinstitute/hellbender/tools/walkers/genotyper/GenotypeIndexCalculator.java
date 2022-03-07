@@ -8,16 +8,12 @@ import java.util.Arrays;
 
 public class GenotypeIndexCalculator {
     private final int ploidy;
-    private final int alleleCount;
 
     // instead of re-allocating, we re-use the same container
     private final int[] alleleContainer;
 
-
-
-    public GenotypeIndexCalculator(final int ploidy, final int alleleCount) {
+    public GenotypeIndexCalculator(final int ploidy) {
         this.ploidy = ploidy;
-        this.alleleCount = alleleCount;
         alleleContainer = new int[ploidy];
     }
 

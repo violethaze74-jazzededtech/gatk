@@ -3,7 +3,6 @@ package org.broadinstitute.hellbender.tools.walkers.genotyper;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.GenotypeLikelihoods;
 import org.apache.commons.lang3.mutable.MutableDouble;
-import org.apache.commons.lang3.mutable.MutableInt;
 import org.apache.commons.math3.util.FastMath;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.MathUtils;
@@ -60,10 +59,10 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
     public GenotypeLikelihoodCalculator(final int ploidy, final int alleleCount,
                                         final GenotypeAlleleCounts[][] genotypeTableByPloidy) {
         genotypeAlleleCounts = genotypeTableByPloidy[ploidy];
-        genotypeCount = (int) GenotypeLikelihoodCalculators.numberOfGenotpyes(ploidy, alleleCount);
+        genotypeCount = (int) GenotypeLikelihoodCalculators.numberOfGenotypes(ploidy, alleleCount);
         this.alleleCount = alleleCount;
         this.ploidy = ploidy;
-        genotypeIndexCalculator = new GenotypeIndexCalculator(ploidy, alleleCount);
+        genotypeIndexCalculator = new GenotypeIndexCalculator(ploidy);
     }
 
     /**
@@ -166,14 +165,14 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
                 final int allele = alleleCounts.alleleIndexAt(0);
                 result[genotypeIndex] = MathUtils.sum(likelihoodsByAlleleAndRead[allele]);
             } else if (componentCount == 2) {
-                // biallelic het case: log P(reads | nA copies of A, nB copies of B) = sum_{reads} log[(nA * P(read | A) + nB * P(read | B))] -log(ploidy)
+                // biallelic het case: log P(reads | nA copies of A, nB copies of B) = sum_{reads} (log[(nA * P(read | A) + nB * P(read | B))] -log(ploidy))
                 final double[] logLks1 = likelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(0)];
-                final int freq1 = alleleCounts.alleleCountAt(0);
-                final double log10Freq1 = MathUtils.log10(freq1);
+                final int count1 = alleleCounts.alleleCountAt(0);
+                final double log10Count1 = MathUtils.log10(count1);
                 final double[] logLks2  = likelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(1)];
-                final double log10Freq2 = MathUtils.log10(ploidy - freq1);
+                final double log10Count2 = MathUtils.log10(ploidy - count1);
 
-                result[genotypeIndex] = new IndexRange(0, readCount).sum(r -> MathUtils.approximateLog10SumLog10(logLks1[r] + log10Freq1, logLks2[r] + log10Freq2))
+                result[genotypeIndex] = new IndexRange(0, readCount).sum(r -> MathUtils.approximateLog10SumLog10(logLks1[r] + log10Count1, logLks2[r] + log10Count2))
                         - readCount * MathUtils.log10(ploidy);
             } else {
                 // the multiallelic case is conceptually the same as the biallelic case but done in non-log space
@@ -228,7 +227,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
             return alleleCounts.increase();
         }
     }
-
 
     /**
      * Returns the ploidy for this genotype likelihood calculator.

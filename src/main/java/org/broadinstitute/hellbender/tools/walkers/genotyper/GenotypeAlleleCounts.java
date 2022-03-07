@@ -79,7 +79,7 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
      * [0, 2] = AA:  log10(1)
      * [0, 1, 1, 1, 2, 1] = ABC: log10(6)
      * [0, 2, 1, 2] = AABB: log10(4!/(2!2!))
-     * This is evaluated lazily i.e. it is initialized to {@link GenotypeAlleleCounts::UNCOMPUTED_LOG_10_COMBINATION_COUNT}
+     * This is evaluated lazily i.e. it is initialized to {@link GenotypeAlleleCounts#UNCOMPUTED_LOG_10_COMBINATION_COUNT}
      * and only calculated if its getter is invoked.
      */
     private double log10CombinationCount = UNCOMPUTED_LOG_10_COMBINATION_COUNT;
@@ -147,7 +147,7 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
      *
      * <p>
      *     This method must not be invoked on cached genotype-allele-counts that are meant to remain constant,
-     *     such as the ones contained in {@link GenotypeLikelihoodCalculators::genotypeTableByPloidy}.
+     *     such as the ones contained in {@link GenotypeLikelihoodCalculators#genotypeTableByPloidy}.
      * </p>
      *
      * @param times the number of times to increase.
@@ -166,7 +166,7 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
      *
      * <p>
      *     This method must not be invoked on cached genotype-allele-counts that are meant to remain constant,
-     *     such as the ones contained in {@link GenotypeLikelihoodCalculators::genotypeTableByPloidy}
+     *     such as the ones contained in {@link GenotypeLikelihoodCalculators#genotypeTableByPloidy}
      * </p>
      */
     protected GenotypeAlleleCounts increase() {
@@ -307,7 +307,7 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
      * Gets the log10 combination count, computing it if uninitialized.  Note that the invoked MathUtils method uses fast cached
      * log10 values of integers for any reasonable ploidy.
      *
-     * This method should be invoked on instances of {@link GenotypeAlleleCounts} cached in {@link GenotypeLikelihoodCalculators::genotypeTableByPloidy}.
+     * This method should be invoked on instances of {@link GenotypeAlleleCounts} cached in {@link GenotypeLikelihoodCalculators#genotypeTableByPloidy}.
      * Such usage allows the result of this computation to be cached once for an entire run of HaplotypeCaller.
      * @return
      */

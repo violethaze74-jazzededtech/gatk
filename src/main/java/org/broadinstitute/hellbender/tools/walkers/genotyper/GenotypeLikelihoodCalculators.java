@@ -89,7 +89,7 @@ public final class GenotypeLikelihoodCalculators {
      *
      * We could inline this and just call the other function, but having a distinct name is much clearer.
      */
-    public static long numberOfGenotpyes(final int ploidy, final int alleleCount) {
+    public static long numberOfGenotypes(final int ploidy, final int alleleCount) {
         checkPloidyAndMaximumAllele(ploidy, alleleCount);
         return numberOfGenotypesBeforeAllele(ploidy, alleleCount);
     }
@@ -157,11 +157,11 @@ public final class GenotypeLikelihoodCalculators {
     private static GenotypeAlleleCounts[] buildGenotypeAlleleCountsArray(final int ploidy, final int alleleCount) {
         Utils.validateArg(ploidy >= 0, () -> "the requested ploidy cannot be negative: " + ploidy);
         Utils.validateArg(alleleCount >= 0, () -> "the requested maximum allele cannot be negative: " + alleleCount);
-        final long length = numberOfGenotpyes(ploidy, alleleCount);
-        final int strongRefLength = length == MathUtils.LONG_OVERFLOW ? MAXIMUM_CACHED_GENOTYPES_PER_CALCULATOR : (int) Math.min(length, MAXIMUM_CACHED_GENOTYPES_PER_CALCULATOR);
-        final GenotypeAlleleCounts[] result = new GenotypeAlleleCounts[strongRefLength];
+        final long length = numberOfGenotypes(ploidy, alleleCount);
+        final int numberOfCachedGenotypes = length == MathUtils.LONG_OVERFLOW ? MAXIMUM_CACHED_GENOTYPES_PER_CALCULATOR : (int) Math.min(length, MAXIMUM_CACHED_GENOTYPES_PER_CALCULATOR);
+        final GenotypeAlleleCounts[] result = new GenotypeAlleleCounts[numberOfCachedGenotypes];
         result[0] = GenotypeAlleleCounts.first(ploidy);
-        for (int genotypeIndex = 1; genotypeIndex < strongRefLength; genotypeIndex++) {
+        for (int genotypeIndex = 1; genotypeIndex < numberOfCachedGenotypes; genotypeIndex++) {
             result[genotypeIndex] = result[genotypeIndex - 1].next();
         }
         return result;
@@ -245,7 +245,7 @@ public final class GenotypeLikelihoodCalculators {
      * @return the number of genotypes given ploidy and allele count (0 or greater).
      */
     public static int genotypeCount(final int ploidy, final int alleleCount) {
-        final long result = numberOfGenotpyes(ploidy, alleleCount);
+        final long result = numberOfGenotypes(ploidy, alleleCount);
         Utils.validateArg(result != MathUtils.LONG_OVERFLOW && result < Integer.MAX_VALUE, () ->
                 String.format("the number of genotypes is too large for ploidy %d and %d alleles: approx. %.0f", ploidy, alleleCount,
                         Math.pow(10, MathUtils.log10BinomialCoefficient(ploidy + alleleCount - 1, alleleCount - 1))));
