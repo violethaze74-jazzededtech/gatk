@@ -49,6 +49,9 @@ public abstract class SVEvidenceAggregator<T extends Feature> {
     public List<T> collectEvidence(final SVCallRecord call) {
         Utils.nonNull(call);
         final SimpleInterval callInterval = getEvidenceQueryInterval(call);
+        if (callInterval == null) {
+            return Collections.emptyList();
+        }
         final Collection<T> rawEvidence;
         if (cacheIntervalTree == null) {
             rawEvidence = source.queryAndPrefetch(callInterval);

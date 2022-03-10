@@ -76,11 +76,14 @@ import java.util.stream.Collectors;
 public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariantWalker {
     public static final String SPLIT_READ_LONG_NAME = "split-reads-file";
     public static final String DISCORDANT_PAIRS_LONG_NAME = "discordant-pairs-file";
+    public static final String BAF_LONG_NAME = "baf-file";
     public static final String SAMPLE_COVERAGE_LONG_NAME = "sample-coverage";
     public static final String PE_INNER_WINDOW_LONG_NAME = "pe-inner-window";
     public static final String PE_OUTER_WINDOW_LONG_NAME = "pe-outer-window";
     public static final String SR_WINDOW_LONG_NAME = "sr-window";
     public static final String SR_INSERTION_CROSSOVER_LONG_NAME = "sr-insertion-crossover";
+    public static final String BAF_MIN_SIZE_LONG_NAME = "baf-min-size";
+    public static final String BAF_PADDING_FRACTION_LONG_NAME = "baf-padding-fraction";
     public static final String X_CHROMOSOME_LONG_NAME = "x-chromosome-name";
     public static final String Y_CHROMOSOME_LONG_NAME = "y-chromosome-name";
 
@@ -97,6 +100,13 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
             optional = true
     )
     private GATKPath discordantPairsFile;
+
+    @Argument(
+            doc = "B-allele frequency (BAF) evidence file",
+            fullName = BAF_LONG_NAME,
+            optional = true
+    )
+    private GATKPath bafFile;
 
     @Argument(
             doc = "Tab-delimited table with sample IDs in the first column and expected per-base coverage per sample " +
@@ -150,8 +160,24 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
     )
     private int splitReadInsertionCrossover = BreakpointRefiner.DEFAULT_MAX_INSERTION_CROSS_DISTANCE;
 
+    @Argument(
+            doc = "Minimum variant size for BAF aggregation",
+            fullName = BAF_MIN_SIZE_LONG_NAME,
+            minValue = 0,
+            optional = true
+    )
+    private int bafMinSize = 5000;
+
+    @Argument(
+            doc = "BAF flanking region size as a fraction of variant size",
+            fullName = BAF_PADDING_FRACTION_LONG_NAME,
+            minValue = 0.01,
+            optional = true
+    )
+    private double bafPaddingFraction = 1.0;
+
     /**
-     * Expected format is tab-delimited and contains a header with the first column SAMPLES and remaining columns
+     * Expected format is tab-delimited and contains a header with the first column SAMPLE and remaining columns
      * contig names. Each row corresponds to a sample, with the sample ID in the first column and contig ploidy
      * integers in their respective columns.
      */
@@ -178,13 +204,19 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
 
     private SAMSequenceDictionary dictionary;
     private VariantContextWriter writer;
+
     private FeatureDataSource<SplitReadEvidence> splitReadSource;
-    private FeatureDataSource<DiscordantPairEvidence> discordantPairSource;
-    private BreakpointRefiner breakpointRefiner;
-    private DiscordantPairEvidenceTester discordantPairEvidenceTester;
-    private DiscordantPairEvidenceAggregator discordantPairCollector;
     private SplitReadEvidenceAggregator startSplitCollector;
     private SplitReadEvidenceAggregator endSplitCollector;
+    private BreakpointRefiner breakpointRefiner;
+
+    private FeatureDataSource<DiscordantPairEvidence> discordantPairSource;
+    private DiscordantPairEvidenceAggregator discordantPairCollector;
+    private DiscordantPairEvidenceTester discordantPairEvidenceTester;
+
+    private FeatureDataSource<BafEvidence> bafSource;
+    private BafEvidenceAggregator bafCollector;
+
     private Map<String,Double> sampleCoverageMap;
     private Set<String> samples;
     private VCFHeader header;
@@ -193,9 +225,11 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
 
     private Collection<SimpleInterval> discordantPairIntervals;
     private Collection<SimpleInterval> splitReadIntervals;
+    private Collection<SimpleInterval> bafIntervals;
 
     private Collection<VariantContext> outputBuffer;
 
+    private final int BAF_QUERY_LOOKAHEAD = 0;
     private final int SPLIT_READ_QUERY_LOOKAHEAD = 0;
     private final int DISCORDANT_PAIR_QUERY_LOOKAHEAD = 0;
 
@@ -218,6 +252,7 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
         }
         discordantPairIntervals = new ArrayList<>();
         splitReadIntervals = new ArrayList<>();
+        bafIntervals = new ArrayList<>();
         outputBuffer = new ArrayList<>();
         writer = createVCFWriter(Paths.get(outputFile));
         header = getVCFHeader();
@@ -250,6 +285,11 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
         breakpointRefiner = new BreakpointRefiner(sampleCoverageMap, splitReadInsertionCrossover, dictionary);
     }
 
+    private void initializeBAFCollection() {
+        initializeBAFEvidenceDataSource();
+        bafCollector = new BafEvidenceAggregator(bafSource, dictionary, bafMinSize, bafPaddingFraction);
+    }
+
     private void initializeDiscordantPairDataSource() {
         discordantPairSource = new FeatureDataSource<>(
                 discordantPairsFile.toString(),
@@ -263,9 +303,19 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
     private void initializeSplitReadEvidenceDataSource() {
         splitReadSource = new FeatureDataSource<>(
                 splitReadsFile.toString(),
-                "splitReadsFile1",
+                "splitReadsFile",
                 SPLIT_READ_QUERY_LOOKAHEAD,
                 SplitReadEvidence.class,
+                cloudPrefetchBuffer,
+                cloudIndexPrefetchBuffer);
+    }
+
+    private void initializeBAFEvidenceDataSource() {
+        bafSource = new FeatureDataSource<>(
+                bafFile.toString(),
+                "bafFile",
+                BAF_QUERY_LOOKAHEAD,
+                BafEvidence.class,
                 cloudPrefetchBuffer,
                 cloudIndexPrefetchBuffer);
     }
@@ -289,6 +339,9 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
         if (splitReadSource != null) {
             splitReadSource.close();
         }
+        if (bafSource != null) {
+            bafSource.close();
+        }
         if (writer != null) {
             writer.close();
         }
@@ -301,6 +354,10 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
         final SVCallRecord call = SVCallRecordUtils.create(variant);
         discordantPairIntervals.add(discordantPairCollector.getEvidenceQueryInterval(call));
         splitReadIntervals.add(startSplitCollector.getEvidenceQueryInterval(call));
+        final SimpleInterval bafInterval = bafCollector.getEvidenceQueryInterval(call);
+        if (bafInterval != null) {
+            bafIntervals.add(bafInterval);
+        }
     }
 
     @Override
