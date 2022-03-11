@@ -78,7 +78,7 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
         final Allele refAllele = sampleLikelihoods.getAllele(0);
 
         for (int gtAlleleIndex = 0; gtAlleleIndex < sampleLikelihoods.numberOfAlleles(); gtAlleleIndex++) {
-            final int indexForGT = genotypeIndexCalculator.alleleCountsToIndex(gtAlleleIndex, ploidy);
+            final int indexForGT = GenotypeIndexCalculator.alleleCountsToIndex(gtAlleleIndex, ploidy);
 
             for (int errorAlleleIndex = 0; errorAlleleIndex < sampleLikelihoods.numberOfAlleles(); errorAlleleIndex++) {
                 // We only want to make calls on SNPs for now
@@ -255,7 +255,7 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
 
                 //This is crufty, it just so happens that the index of the homozygous genotype corresponds to the maximum genotype count per field.
                 //This should be pulled off as a calculator in some genotyping class.
-                final int indexForGT = genotypeIndexCalculator.alleleCountsToIndex(gtAlleleIndex, ploidy);
+                final int indexForGT = GenotypeIndexCalculator.alleleCountsToIndex(gtAlleleIndex, ploidy);
 
                 // TODO restore the critical thresholds
                 if (HaplotypeCallerGenotypingDebugger.isEnabled()) {
@@ -286,7 +286,7 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
                 if (maxEffectiveDepthForHetAdjustment > 0) {
                     // Use the index corresponding the mixture of F and
                     final double localBestModelScore = localBestModel[0] - localBestModel[1];
-                    final int closestGTAlleleIndex = allelesToIndex(gtAlleleIndex, fAlleleIndex);
+                    final int closestGTAlleleIndex = GenotypeIndexCalculator.allelesToIndex(gtAlleleIndex, fAlleleIndex);
                     final double log10LikelihoodsForPloyidyModel = ploidyModelLikelihoods[closestGTAlleleIndex] - -MathUtils.LOG10_ONE_HALF;
                     final int depthForGenotyping = sampleLikelihoods.evidenceCount();
                     final double adjustedBestModel = log10LikelihoodsForPloyidyModel + ((localBestModelScore - log10LikelihoodsForPloyidyModel)

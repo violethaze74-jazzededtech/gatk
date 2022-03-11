@@ -223,7 +223,7 @@ public abstract class GenotypingEngine<Config extends StandardCallerArgumentColl
             final int spanDelIndex = alleles.indexOf(Allele.SPAN_DEL);
             // allele counts are in the GenotypeLikelihoodCalculator format of {ref index, ref count, span del index, span del count}
             final double[] nonVariantLog10Posteriors = IntStream.rangeClosed(0, ploidy)
-                    .map(n -> glCalc.alleleCountsToIndex(0, ploidy - n, spanDelIndex, n))
+                    .map(n -> GenotypeIndexCalculator.alleleCountsToIndex(0, ploidy - n, spanDelIndex, n))
                     .mapToDouble(n -> posteriors[n])
                     .toArray();
 

@@ -4,6 +4,7 @@ import htsjdk.variant.variantcontext.*;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.math3.util.MathArrays;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeIndexCalculator;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeLikelihoodCalculator;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeLikelihoodCalculators;
 import org.broadinstitute.hellbender.GATKBaseTest;
@@ -328,7 +329,7 @@ public class AlleleFrequencyCalculatorUnitTest extends GATKBaseTest {
     private static int[] PLsForObviousCall(final int ploidy, final int numAlleles, final int[] alleleCounts, final int PL)   {
         final GenotypeLikelihoodCalculator glCalc = GL_CALCS.getInstance(ploidy, numAlleles);
         final int[] result = Collections.nCopies(glCalc.genotypeCount(), PL).stream().mapToInt(n->n).toArray();
-        result[glCalc.alleleCountsToIndex(alleleCounts)] = 0;
+        result[GenotypeIndexCalculator.alleleCountsToIndex(alleleCounts)] = 0;
         return result;
     }
 

@@ -396,7 +396,7 @@ public final class AlleleSubsettingUtils {
                 final int[] newAlleleCounts = IntStream.range(0, newAlleles.size()).flatMap(newAlleleIndex ->
                         IntStream.of(newAlleleIndex, oldAlleleCounts.alleleCountFor(allelePermutation.fromIndex(newAlleleIndex)))).toArray();
 
-                final int newPLIndex = glCalc.alleleCountsToIndex(newAlleleCounts);
+                final int newPLIndex = GenotypeIndexCalculator.alleleCountsToIndex(newAlleleCounts);
                 result[newPLIndex] = oldPLIndex;
             }
         }

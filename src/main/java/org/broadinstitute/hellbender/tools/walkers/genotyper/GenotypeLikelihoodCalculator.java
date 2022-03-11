@@ -27,8 +27,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
 
     final int ploidy;
 
-    final GenotypeIndexCalculator genotypeIndexCalculator;
-    
     /**
      * Cache of the last genotype-allele-count requested using {@link #genotypeAlleleCountsAt(int)}, when it
      * goes beyond the maximum genotype-allele-count static capacity. Check on that method documentation for details.
@@ -62,19 +60,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
         genotypeCount = (int) GenotypeLikelihoodCalculators.numberOfGenotypes(ploidy, alleleCount);
         this.alleleCount = alleleCount;
         this.ploidy = ploidy;
-        genotypeIndexCalculator = new GenotypeIndexCalculator(ploidy);
-    }
-
-    /**
-     * Give a list of alleles, returns the likelihood array index.
-     * @param alleles the indices of the alleles in the genotype, there should be as many repetition of an
-     *                      index as copies of that allele in the genotype. Allele indices do not need to be sorted in
-     *                      any particular way.
-     *
-     * @return never {@code null}.
-     */
-    public int allelesToIndex(final int... alleles) {
-        return genotypeIndexCalculator.allelesToIndex(alleles);
     }
 
     /**
@@ -245,15 +230,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
     }
 
     /**
-     * Returns the likelihood index given the allele counts in format (allele1, count1, allele2, count2. . . )
-     *
-     * @param alleleCountArray allele counts in the format returned by {@link GenotypeAlleleCounts#copyAlleleCounts}.
-     */
-    public int alleleCountsToIndex(final int ... alleleCountArray) {
-        return genotypeIndexCalculator.alleleCountsToIndex(alleleCountArray);
-    }
-
-    /**
      * Composes a genotype index map given a allele index recoding such that result[i] is the index of the old
      * genotype corresponding to the ith new genotype.
      *
@@ -266,23 +242,17 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
      *
      * @return never {@code null}.
      */
-    public int[] newToOldGenotypeMap(final int[] newToOldAlleleMap) {
+    public int[] newToOldGenotypeMap(final int[] newToOldAlleleMap, final GenotypeLikelihoodCalculators glCalcs) {
         Utils.nonNull(newToOldAlleleMap);
         final int newAlleleCount = newToOldAlleleMap.length;
         Utils.validateArg(newAlleleCount <= alleleCount,
                 () -> String.format("New allele count %d exceeds old allele count %d.", newAlleleCount, alleleCount));
-        final int newGenotypeCount = newAlleleCount == alleleCount ? genotypeCount :
-                GenotypeLikelihoodCalculators.genotypeCount(ploidy, newAlleleCount);
-
-        final int[] result = new int[newGenotypeCount];
-        GenotypeAlleleCounts newGAC = genotypeAlleleCounts[0];
-        for (int i = 0; i < newGenotypeCount; i++) {
-            result[i] = genotypeIndexCalculator.alleleCountsToIndex(newGAC, newToOldAlleleMap);
-
-            if (i < newGenotypeCount - 1) {
-                newGAC = nextGenotypeAlleleCounts(newGAC);
-            }
+                ;
+        final int[] result = new int[GenotypeLikelihoodCalculators.genotypeCount(ploidy, newAlleleCount)];
+        for (final GenotypeAlleleCounts newGAC : glCalcs.getInstance(ploidy, newAlleleCount)) {
+            result[newGAC.index()] = GenotypeIndexCalculator.alleleCountsToIndex(newGAC, newToOldAlleleMap);
         }
+
         return result;
     }
 

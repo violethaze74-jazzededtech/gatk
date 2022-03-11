@@ -42,8 +42,6 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
             final int[] alleleCountArray = new int[alleleCounts.distinctAlleleCount() << 1];
             alleleCounts.copyAlleleCounts(alleleCountArray,0);
             Assert.assertEquals(index, ploidy);
-            Assert.assertEquals(calculator.allelesToIndex(alleleArray), i);
-            Assert.assertEquals(calculator.alleleCountsToIndex(alleleCountArray), i);
         }
     }
     
@@ -93,7 +91,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
         final GenotypeLikelihoodCalculators calculators = new GenotypeLikelihoodCalculators();
         final GenotypeLikelihoodCalculator calculator = calculators.getInstance(ploidy, maxAlleleCount);
 
-        final int[] genotypeIndexMap = calculator.newToOldGenotypeMap(alleleMap);
+        final int[] genotypeIndexMap = calculator.newToOldGenotypeMap(alleleMap, calculators);
         Assert.assertNotNull(genotypeIndexMap);
         Assert.assertEquals(genotypeIndexMap.length, GenotypeLikelihoodCalculators.genotypeCount(ploidy, newAlleleCount));
 

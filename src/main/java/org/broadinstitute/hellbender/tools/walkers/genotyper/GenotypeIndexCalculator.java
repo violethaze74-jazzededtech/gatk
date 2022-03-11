@@ -7,15 +7,8 @@ import org.broadinstitute.hellbender.utils.Utils;
 import java.util.Arrays;
 
 public class GenotypeIndexCalculator {
-    private final int ploidy;
 
-    // instead of re-allocating, we re-use the same container
-    private final int[] alleleContainer;
-
-    public GenotypeIndexCalculator(final int ploidy) {
-        this.ploidy = ploidy;
-        alleleContainer = new int[ploidy];
-    }
+    private GenotypeIndexCalculator() {}
 
     /**
      * Give a list of alleles, returns the likelihood array index.
@@ -25,19 +18,9 @@ public class GenotypeIndexCalculator {
      *
      * @return never {@code null}.
      */
-    public int allelesToIndex(final int... alleles) {
-        Utils.validateArg(alleles.length == ploidy,
-                () -> String.format("Total allele count %d does not match ploidy %d.", alleles.length, ploidy));
-
-        // Special case ploidy == 0.
-        if (ploidy == 0) {
-            return 0;
-        }
-
-        for (int n = 0; n < ploidy; n++) {
-            alleleContainer[n] = alleles[n];
-        }
-        return calculateIndex(alleleContainer);
+    public static int allelesToIndex(final int... alleles) {
+        final int ploidy = alleles.length;
+        return ploidy == 0 ? 0 : calculateIndex(Arrays.copyOf(alleles, ploidy));
     }
 
     /**
@@ -48,24 +31,26 @@ public class GenotypeIndexCalculator {
      *
      * @throws IllegalArgumentException if {@code alleleCountArray} is null, has odd length, contains negative counts,
      * or has a total allele count different from the ploidy.
-
      */
-    public int alleleCountsToIndex(final int ... alleleCountArray) {
+    public static int alleleCountsToIndex(final int ... alleleCountArray) {
         Utils.nonNull(alleleCountArray, "the allele counts cannot be null");
         Utils.validateArg((alleleCountArray.length & 1) == 0, "the allele counts array cannot have odd length");
+        int ploidy = 0;
+        for (int i = 0; i < alleleCountArray.length; i += 2) {
+            ploidy += alleleCountArray[i+1];
+        }
+        final int[] alleleContainer = new int[ploidy];
+
+
         int n = 0;
-        int totalCount = 0;
         for (int i = 0; i < alleleCountArray.length; i += 2) {
             final int allele = alleleCountArray[i];
             final int count = alleleCountArray[i+1];
-            totalCount += count;
             Utils.validateArg(count >= 0, "no allele count can be less than 0");
-            for (int j = 0; j < count; j++) {
-                alleleContainer[n++] = allele;
+            for (int j = 0; j < count; j++, n++) {
+                alleleContainer[n] = allele;
             }
         }
-        final int totalCountLambda = totalCount; // variables must be final in Java lambda
-        Utils.validateArg(totalCount == ploidy, () -> String.format("Total allele count %d does not match ploidy %d.", totalCountLambda, ploidy));
         return calculateIndex(alleleContainer);
     }
 
@@ -74,7 +59,8 @@ public class GenotypeIndexCalculator {
      * object in some new basis of alleles and a int -> int map (in the form of an array) to translate from new allele
      * indices to the "old" allele indices of this instance.
      */
-    public int alleleCountsToIndex(final GenotypeAlleleCounts newGAC, final int[] newToOldAlleleMap) {
+    public static int alleleCountsToIndex(final GenotypeAlleleCounts newGAC, final int[] newToOldAlleleMap) {
+        final int[] alleleContainer = new int[newGAC.ploidy()];
         final MutableInt n = new MutableInt(0);
         newGAC.forEachAlleleIndexAndCount((newAllele, count) -> {
             final int oldAllele = newToOldAlleleMap[newAllele];
@@ -90,27 +76,13 @@ public class GenotypeIndexCalculator {
      * (3) the number of ploidy 1 genotypes before reaching A in the 1st position.
      */
     private static int calculateIndex(final int[] alleles) {
-        // traverse alleles from highest to lowest index
-        sort(alleles);
         final int ploidy = alleles.length;
+
+        // traverse alleles from highest to lowest index
+        Arrays.sort(alleles);
         return new IndexRange(0, ploidy).sumInt(n ->  {
             final int allele = alleles[ploidy - n - 1];
             return (int) GenotypeLikelihoodCalculators.numberOfGenotypesBeforeAllele(ploidy - n, allele);
         });
-    }
-
-    private static void sort(final int[] array) {
-        final int len = array.length;
-        if (len < 2) {
-            return;
-        } else if (len == 2) {
-            if (array[1] < array[0]) {
-                final int tmp = array[0];
-                array[0] = array[1];
-                array[1] = tmp;
-            }
-        } else {
-            Arrays.sort(array);
-        }
     }
 }
