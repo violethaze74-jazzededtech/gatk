@@ -52,18 +52,18 @@ import java.util.stream.IntStream;
  *     <tr><td>2</td><td><b>0/1/1</b></td></tr>
  *     <tr><td>3</td><td><b>1/1/1</b></td></tr>
  *     <tr><td>4</td><td><b>0/0/2</b></td></tr>
- *     <tr><td>6</td><td><b>0/1/2</b></td></tr>
- *     <tr><td>7</td><td><b>1/1/2</b></td></tr>
- *     <tr><td>8</td><td><b>0/2/2</b></td></tr>
- *     <tr><td>9</td><td><b>1/2/2</b></td></tr>
- *     <tr><td>10</td><td><b>2/2/2</b></td></tr>
- *     <tr><td>11</td><td><b>0/0/3</b></td></tr>
- *     <tr><td>12</td><td><b>0/1/3</b></td></tr>
- *     <tr><td>13</td><td><b>1/1/3</b></td></tr>
- *     <tr><td>14</td><td><b>0/2/3</b></td></tr>
- *     <tr><td>15</td><td><b>1/2/3</b></td></tr>
- *     <tr><td>16</td><td><b>2/2/3</b></td></tr>
- *     <tr><td>17</td><td><b>0/3/3</b></td></tr>
+ *     <tr><td>5</td><td><b>0/1/2</b></td></tr>
+ *     <tr><td>6</td><td><b>1/1/2</b></td></tr>
+ *     <tr><td>7</td><td><b>0/2/2</b></td></tr>
+ *     <tr><td>8</td><td><b>1/2/2</b></td></tr>
+ *     <tr><td>9</td><td><b>2/2/2</b></td></tr>
+ *     <tr><td>10</td><td><b>0/0/3</b></td></tr>
+ *     <tr><td>11</td><td><b>0/1/3</b></td></tr>
+ *     <tr><td>12</td><td><b>1/1/3</b></td></tr>
+ *     <tr><td>13</td><td><b>0/2/3</b></td></tr>
+ *     <tr><td>14</td><td><b>1/2/3</b></td></tr>
+ *     <tr><td>15</td><td><b>2/2/3</b></td></tr>
+ *     <tr><td>16</td><td><b>0/3/3</b></td></tr>
  *     <tr><td>...</td><td>...</td></tr>
  * </table>
  *
@@ -513,90 +513,6 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
         return rank < 0 ? 0 : alleleCountAt(rank);
     }
 
-    /**
-     * Returns the allele counts for each allele index to maximum.
-     * @param maximumAlleleIndex the maximum allele index required.
-     * @throws IllegalArgumentException if {@code maximumAlleleIndex} is less than 0.
-     * @return never {@code null}, an array of exactly {@code maximumAlleleIndex + 1} positions with the counts
-     * of each allele where the position in the array is equal to its index.
-     */
-    public int[] alleleCountsByIndex(final int maximumAlleleIndex) {
-        Utils.validateArg(maximumAlleleIndex >= 0, "the requested allele count cannot be less than 0");
-        final int[] result = new int[maximumAlleleIndex + 1];
-        copyAlleleCountsByIndex(result, 0, 0, maximumAlleleIndex);
-        return result;
-    }
-
-
-    private void copyAlleleCountsByIndex(final int[] dest, final int offset, final int minimumAlleleIndex, final int maximumAlleleIndex) {
-
-        // First we determine what section of the sortedAlleleCounts array contains the counts of interest,
-        // By the present allele rank range of interest.
-        final int minimumAlleleRank = alleleRankFor(minimumAlleleIndex);
-        final int maximumAlleleRank = alleleRankFor(maximumAlleleIndex);
-
-        // If the min or max allele index are absent (returned rank < 0) we note where the would be inserted; that
-        // way we avoid going through the rest of positions in the sortedAlleleCounts array.
-        // The range of interest is then [startRank,endRank].
-        final int startRank = minimumAlleleRank < 0 ? - minimumAlleleRank - 1 : minimumAlleleRank;
-        final int endRank = maximumAlleleRank < 0 ? - maximumAlleleRank - 2 : maximumAlleleRank;
-
-        // Iteration variables:
-        int nextIndex = minimumAlleleIndex; // next index that we want to output the count for.
-        int nextRank = startRank; // next rank to query in sortedAlleleCounts.
-        int nextSortedAlleleCountsOffset = nextRank << 1; // offset in sortedAlleleCounts where the info is present for the next rank.
-        int nextDestOffset = offset; // next offset in destination array where to set the count for the nextIndex.
-
-        while (nextRank++ <= endRank) {
-            final int alleleIndex = sortedAlleleCounts[nextSortedAlleleCountsOffset++];
-            // fill non-present allele counts with 0s.
-            while (alleleIndex > nextIndex) {
-                dest[nextDestOffset++] = 0;
-                nextIndex++;
-            }
-            // It is guaranteed that at this point alleleIndex == nextIndex
-            // thanks to the condition of the enclosing while: there must be at least one index of interest that
-            // is present in the remaining (nextRank,endRank] interval as otherwise endRank would be less than nextRank.
-            dest[nextDestOffset++] = sortedAlleleCounts[nextSortedAlleleCountsOffset++];
-            nextIndex++;
-        }
-        // Finally we take care of trailing requested allele indices.
-        while (nextIndex++ <= maximumAlleleIndex) {
-            dest[nextDestOffset++] = 0;
-        }
-    }
-
-    /**
-     * Copies the sorted allele counts into an array.
-     *
-     * <p>
-     *     Sorted allele counts are disposed as an even-sized array where even positions indicate the allele index and
-     *     the following odd positions the number of copies of that allele in this genotype allele count:
-     * </p>
-     * <p><pre>
-     *     [ allele_0, freq_0, allele_1, freq_1 ... ]
-     * </pre></p>
-     *
-     * <p>
-     *     With {@code offset} you can indicate an alternative first position in the destination array.
-     * </p>
-     *
-     * @param dest where to copy the counts.
-     * @param offset starting position.
-     *
-     * @throws IllegalArgumentException if {@code dest} is {@code null}, {@code offset} is less than 0
-     *   or {@code dest} is not large enough considering the number of alleles present in this genotype
-     *   allele counts and the {@code offset} provided. A total of
-     *   <code>{@link #distinctAlleleCount()} * 2 positions</code>
-     *   are required for the job.
-     */
-    public void copyAlleleCounts(final int[] dest, final int offset) {
-        Utils.nonNull(dest, "the destination cannot be null");
-        Utils.validateArg(offset >= 0, "the offset cannot be negative");
-        final int sortedAlleleCountsLength = distinctAlleleCount << 1;
-        Utils.validateArg(offset + sortedAlleleCountsLength <= dest.length, "the input array does not have enough capacity");
-        System.arraycopy(sortedAlleleCounts, 0, dest, offset, sortedAlleleCountsLength);
-    }
 
     /**
      * Instantiates the first genotype possible provided a total ploidy.

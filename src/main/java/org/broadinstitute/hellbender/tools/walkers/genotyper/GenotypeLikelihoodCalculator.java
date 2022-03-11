@@ -49,15 +49,22 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
      * for genotype containing alleles A, B, C, we first fill the buffer with the likelihood contributions from allele A, then
      * we make a second pass and add the contributions from allele B, then allele C.  Traversing all the reads in each
      * allele row of the likelihoods array in this manner is cache-friendly and makes an enormous difference in runtime.
+     *
+     * The difference in performance comes from the fact that we index likelihoods first by allele, then by read.  Because of this,
+     * likelihoods of consecutive reads with the same allele are adjacent in memory while likelihoods of consecutive alleles with the same read
+     * are not.  In the former case looking up new likelihoods almost always results in a cache hit since many reads of the same allele
+     * are loaded on the same cache page.
+     *
+     * If the cache-friendliness of this class is broken, it will show up as a severe regression in the runtime of its unit tests
+     * for larger ploidies and allele counts.
      */
     private double[] perReadBuffer = new double[INITIAL_READ_CAPACITY];
-
 
 
     public GenotypeLikelihoodCalculator(final int ploidy, final int alleleCount,
                                         final GenotypeAlleleCounts[][] genotypeTableByPloidy) {
         genotypeAlleleCounts = genotypeTableByPloidy[ploidy];
-        genotypeCount = (int) GenotypeLikelihoodCalculators.numberOfGenotypes(ploidy, alleleCount);
+        genotypeCount = GenotypeIndexCalculator.genotypeCount(ploidy, alleleCount);
         this.alleleCount = alleleCount;
         this.ploidy = ploidy;
     }
@@ -248,7 +255,7 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
         Utils.validateArg(newAlleleCount <= alleleCount,
                 () -> String.format("New allele count %d exceeds old allele count %d.", newAlleleCount, alleleCount));
                 ;
-        final int[] result = new int[GenotypeLikelihoodCalculators.genotypeCount(ploidy, newAlleleCount)];
+        final int[] result = new int[GenotypeIndexCalculator.genotypeCount(ploidy, newAlleleCount)];
         for (final GenotypeAlleleCounts newGAC : glCalcs.getInstance(ploidy, newAlleleCount)) {
             result[newGAC.index()] = GenotypeIndexCalculator.alleleCountsToIndex(newGAC, newToOldAlleleMap);
         }

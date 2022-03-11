@@ -62,39 +62,6 @@ public final class GenotypeLikelihoodCalculators {
     }
 
     /**
-     *     How many genotypes with given ploidy appear in the standard order before a given allele is reached.
-     *
-     *     For example, considering alleles A, B, C, D, etc ... (indexed 0, 1, 2, ... respectively):
-     *     f(3,A) = f(3,0) = 0 as the first genotype AAA contains A.
-     *     f(3,B) = f(3,1) = 1 as the second genotype AAB contains B.
-     *     f(3,C) = f(3,2) = 4 as the first genotype that contains C, AAC follows: AAA AAB ABB BBB
-     *     f(4,D) = f(4,3) = 15 as AAAD follows AAAA AAAB AABB ABBB BBBB AAAC AABC ABBC BBBC AACC ABCC BBCC ACCC BCCC CCCC
-     *
-     *     There is a simple closed-form expression for this.  Any genotype with ploidy p and a alleles can be encoded
-     *     by p 'x's and a - 1 '/'s, where each x represents one allele count and each slash divides between consecutive alleles.
-     *     For example, with p = 3 and a = 3 we have xxx// representing AAA, //xxx representing CCC, x/x/x representing ABC,
-     *     and xx//x representing AAC.  It is easy to see that any such string corresponds to a genotype, and the number of such
-     *     strings is given by the number of places to put the a-1 slashes within the p+a-1 total characters, which is
-     *     simply the binomial coefficient (p+a-1)C(a-1).  Considering that allele indices are zero-based, we also have
-     *     f(p,a) = (p+a-1)C(a-1).
-     */
-    public static long numberOfGenotypesBeforeAllele(final int ploidy, final int allele) {
-        return allele == 0 ? 0 : MathUtils.exactBinomialCoefficient(ploidy + allele - 1, allele - 1);
-    }
-
-    /**
-     * Number of genotypes for a given ploidy and allele count.  Follows the same logic as
-     * {@link GenotypeLikelihoodCalculator::numberOfGenotypesBeforeAllele}.  That is, the number of genotypes of ploidy
-     * p and a alleles is equal to the number of genotypes that don't contain an imaginary a-th zero-based allele.
-     *
-     * We could inline this and just call the other function, but having a distinct name is much clearer.
-     */
-    public static long numberOfGenotypes(final int ploidy, final int alleleCount) {
-        checkPloidyAndMaximumAllele(ploidy, alleleCount);
-        return numberOfGenotypesBeforeAllele(ploidy, alleleCount);
-    }
-
-    /**
      * Composes a table with the lists of all possible genotype allele counts given the the ploidy and maximum allele index.
      * <p>
      *     The resulting matrix has at least as many rows as {@code maximumPloidy } + 1 as the first row with index 0 correspond
@@ -157,7 +124,7 @@ public final class GenotypeLikelihoodCalculators {
     private static GenotypeAlleleCounts[] buildGenotypeAlleleCountsArray(final int ploidy, final int alleleCount) {
         Utils.validateArg(ploidy >= 0, () -> "the requested ploidy cannot be negative: " + ploidy);
         Utils.validateArg(alleleCount >= 0, () -> "the requested maximum allele cannot be negative: " + alleleCount);
-        final long length = numberOfGenotypes(ploidy, alleleCount);
+        final long length = GenotypeIndexCalculator.genotypeCount(ploidy, alleleCount);
         final int numberOfCachedGenotypes = length == MathUtils.LONG_OVERFLOW ? MAXIMUM_CACHED_GENOTYPES_PER_CALCULATOR : (int) Math.min(length, MAXIMUM_CACHED_GENOTYPES_PER_CALCULATOR);
         final GenotypeAlleleCounts[] result = new GenotypeAlleleCounts[numberOfCachedGenotypes];
         result[0] = GenotypeAlleleCounts.first(ploidy);
@@ -233,24 +200,6 @@ public final class GenotypeLikelihoodCalculators {
         Utils.validateArg(maximumAllele >= 0, () -> "the maximum allele index provided cannot be negative: " + maximumAllele);
     }
 
-
-    /**
-     * Returns the number of possible genotypes given the ploidy and number of different alleles.
-     * @param ploidy the requested ploidy.
-     * @param alleleCount the requested number of alleles.
-     *
-     * @throws IllegalArgumentException if {@code ploidy} or {@code alleleCount} is negative or
-     *                                      the number of genotypes is too large (more than {@link Integer#MAX_VALUE}).
-     *
-     * @return the number of genotypes given ploidy and allele count (0 or greater).
-     */
-    public static int genotypeCount(final int ploidy, final int alleleCount) {
-        final long result = numberOfGenotypes(ploidy, alleleCount);
-        Utils.validateArg(result != MathUtils.LONG_OVERFLOW && result < Integer.MAX_VALUE, () ->
-                String.format("the number of genotypes is too large for ploidy %d and %d alleles: approx. %.0f", ploidy, alleleCount,
-                        Math.pow(10, MathUtils.log10BinomialCoefficient(ploidy + alleleCount - 1, alleleCount - 1))));
-        return (int) result;
-    }
 
     /**
      * Compute the maximally acceptable allele count (ref allele included) given the maximally acceptable genotype count.

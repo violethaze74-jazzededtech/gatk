@@ -2,6 +2,7 @@ package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.broadinstitute.hellbender.utils.IndexRange;
+import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
 
 import java.util.Arrays;
@@ -9,6 +10,47 @@ import java.util.Arrays;
 public class GenotypeIndexCalculator {
 
     private GenotypeIndexCalculator() {}
+
+    /**
+     *     How many genotypes with given ploidy appear in the standard order before a given allele is reached.
+     *
+     *     For example, considering alleles A, B, C, D, etc ... (indexed 0, 1, 2, ... respectively):
+     *     f(3,A) = f(3,0) = 0 as the first genotype AAA contains A.
+     *     f(3,B) = f(3,1) = 1 as the second genotype AAB contains B.
+     *     f(3,C) = f(3,2) = 4 as the first genotype that contains C, AAC follows: AAA AAB ABB BBB
+     *     f(4,D) = f(4,3) = 15 as AAAD follows AAAA AAAB AABB ABBB BBBB AAAC AABC ABBC BBBC AACC ABCC BBCC ACCC BCCC CCCC
+     *
+     *     There is a simple closed-form expression for this.  Any genotype with ploidy p and a alleles can be encoded
+     *     by p 'x's and a - 1 '/'s, where each x represents one allele count and each slash divides between consecutive alleles.
+     *     For example, with p = 3 and a = 3 we have xxx// representing AAA, //xxx representing CCC, x/x/x representing ABC,
+     *     and xx//x representing AAC.  It is easy to see that any such string corresponds to a genotype, and the number of such
+     *     strings is given by the number of places to put the a-1 slashes within the p+a-1 total characters, which is
+     *     simply the binomial coefficient (p+a-1)C(a-1).  Considering that allele indices are zero-based, we also have
+     *     f(p,a) = (p+a-1)C(a-1).
+     *
+     *     See discussion at https://genome.sph.umich.edu/wiki/Relationship_between_Ploidy,_Alleles_and_Genotypes
+     */
+    public static long indexOfFirstGenotypeWithAllele(final int ploidy, final int allele) {
+        return allele == 0 ? 0 : MathUtils.exactBinomialCoefficient(ploidy + allele - 1, allele - 1);
+    }
+
+    /**
+     * Returns the number of possible genotypes given the ploidy and number of different alleles.
+     * @param ploidy the requested ploidy.
+     * @param alleleCount the requested number of alleles.
+     *
+     * @throws IllegalArgumentException if {@code ploidy} or {@code alleleCount} is negative or
+     *                                      the number of genotypes is too large (more than {@link Integer#MAX_VALUE}).
+     *
+     * @return the number of genotypes given ploidy and allele count (0 or greater).
+     */
+    public static int genotypeCount(final int ploidy, final int alleleCount) {
+        final long result = indexOfFirstGenotypeWithAllele(ploidy, alleleCount);
+        Utils.validateArg(result != MathUtils.LONG_OVERFLOW && result < Integer.MAX_VALUE, () ->
+                String.format("the number of genotypes is too large for ploidy %d and %d alleles: approx. %.0f", ploidy, alleleCount,
+                        Math.pow(10, MathUtils.log10BinomialCoefficient(ploidy + alleleCount - 1, alleleCount - 1))));
+        return (int) result;
+    }
 
     /**
      * Give a list of alleles, returns the likelihood array index.
@@ -26,8 +68,7 @@ public class GenotypeIndexCalculator {
     /**
      * Returns the genotype index given the allele counts in format (allele1, count1, allele2, count2. . . )
      *
-     * @param alleleCountArray the query allele counts. This must follow the format returned by
-     *  {@link GenotypeAlleleCounts#copyAlleleCounts}.
+     * @param alleleCountArray the query allele counts.
      *
      * @throws IllegalArgumentException if {@code alleleCountArray} is null, has odd length, contains negative counts,
      * or has a total allele count different from the ploidy.
@@ -82,7 +123,7 @@ public class GenotypeIndexCalculator {
         Arrays.sort(alleles);
         return new IndexRange(0, ploidy).sumInt(n ->  {
             final int allele = alleles[ploidy - n - 1];
-            return (int) GenotypeLikelihoodCalculators.numberOfGenotypesBeforeAllele(ploidy - n, allele);
+            return (int) indexOfFirstGenotypeWithAllele(ploidy - n, allele);
         });
     }
 }

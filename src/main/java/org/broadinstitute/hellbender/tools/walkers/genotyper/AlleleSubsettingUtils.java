@@ -354,12 +354,11 @@ public final class AlleleSubsettingUtils {
             final double GLDiffBetweenRefAndBestVariantGenotype = Math.abs(glsVector[indexOfMostLikelyVariantGenotype] - glsVector[PL_INDEX_OF_HOM_REF]);
             final int ploidy = genotype.getPloidy() > 0 ? genotype.getPloidy() : defaultPloidy;
 
-            final int[] alleleCounts = new GenotypeLikelihoodCalculators()
-                    .getInstance(ploidy, vc.getNAlleles()).genotypeAlleleCountsAt(indexOfMostLikelyVariantGenotype)
-                    .alleleCountsByIndex(vc.getNAlleles() - 1);
+            final GenotypeAlleleCounts mostLikelyGenotypeAlleleCounts = new GenotypeLikelihoodCalculators()
+                    .getInstance(ploidy, vc.getNAlleles()).genotypeAlleleCountsAt(indexOfMostLikelyVariantGenotype);
 
-            for (int allele = 1; allele < alleleCounts.length; allele++) {
-                if (alleleCounts[allele] > 0) {
+            for (int allele = 1; allele < vc.getNAlleles(); allele++) {
+                if (mostLikelyGenotypeAlleleCounts.containsAllele(allele)) {
                     likelihoodSums[allele] += GLDiffBetweenRefAndBestVariantGenotype;
                 }
             }
@@ -462,7 +461,7 @@ public final class AlleleSubsettingUtils {
         for ( int i = 0; i < alleles.size(); i++ ) {
             if ( alleles.get(i) == Allele.SPAN_DEL ) {
                 //In the canonical order, the homozygous genotype of the ith allele is immediately followed by the first genotype containing the (i+1)th allele.
-                final int homAltIndex = (int) GenotypeLikelihoodCalculators.numberOfGenotypesBeforeAllele(ploidy, i +1) - 1;
+                final int homAltIndex = (int) GenotypeIndexCalculator.indexOfFirstGenotypeWithAllele(ploidy, i +1) - 1;
                 final int PL = PLs[homAltIndex];
                 if ( PL < bestPL ) {
                     bestIndex = i;

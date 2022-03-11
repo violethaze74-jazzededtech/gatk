@@ -2,10 +2,9 @@ package org.broadinstitute.hellbender.utils;
 
 import htsjdk.variant.variantcontext.*;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeAlleleCounts;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeIndexCalculator;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeLikelihoodCalculators;
 import picard.util.MathUtil;
-
-import java.util.Arrays;
 
 public final class GenotypeUtils {
     private static final GenotypeLikelihoodCalculators GL_CALCS = new GenotypeLikelihoodCalculators();
@@ -173,7 +172,7 @@ public final class GenotypeUtils {
         final int hetLikelihood = g.getGQ();
         final int homVarLikelihood = PLOIDY_2_HOM_VAR_SCALE_FACTOR * g.getGQ();
 
-        final int[] PLs = new int[GenotypeLikelihoodCalculators.genotypeCount(2, nAlleles)];
+        final int[] PLs = new int[GenotypeIndexCalculator.genotypeCount(2, nAlleles)];
         for (final GenotypeAlleleCounts gac : GL_CALCS.getInstance(2, nAlleles)) {
                 PLs[gac.index()] = gac.index() == 0 ? homRefLikelihood : (gac.containsAllele(0) ? hetLikelihood : homVarLikelihood);
         }

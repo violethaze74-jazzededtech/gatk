@@ -78,6 +78,7 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
         final Allele refAllele = sampleLikelihoods.getAllele(0);
 
         for (int gtAlleleIndex = 0; gtAlleleIndex < sampleLikelihoods.numberOfAlleles(); gtAlleleIndex++) {
+            // find the index of the homozygous gtAllele genotype
             final int indexForGT = GenotypeIndexCalculator.alleleCountsToIndex(gtAlleleIndex, ploidy);
 
             for (int errorAlleleIndex = 0; errorAlleleIndex < sampleLikelihoods.numberOfAlleles(); errorAlleleIndex++) {

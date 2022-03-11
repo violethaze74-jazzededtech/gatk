@@ -15,7 +15,7 @@ import org.testng.annotations.Test;
 import java.util.*;
 
 /**
- * Tests {@link GenotypeLikelihoodCalculators} and {@link GenotypeLikelihoodCalculatorDRAGEN}.
+ * Tests {@link GenotypeLikelihoodCalculators}.
  *
  * @author Valentin Ruano-Rubio &lt;valentin@broadinstitute.org&gt;
  */
@@ -39,8 +39,6 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
             int index = 0;
             for (int j = 0; j < alleleCounts.distinctAlleleCount(); j++)
                 Arrays.fill(alleleArray, index, index += alleleCounts.alleleCountAt(j), alleleCounts.alleleIndexAt(j));
-            final int[] alleleCountArray = new int[alleleCounts.distinctAlleleCount() << 1];
-            alleleCounts.copyAlleleCounts(alleleCountArray,0);
             Assert.assertEquals(index, ploidy);
         }
     }
@@ -79,6 +77,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
 
     @Test(dataProvider = "ploidyAndMaximumAlleleAndNewMaximumAlleleData")
     public void testGenotypeIndexMap(final int ploidy, final int oldAlleleCount, final int newAlleleCount) {
+        Utils.resetRandomGenerator();
         final Random rnd = Utils.getRandomGenerator();
         final int maxAlleleCount = Math.max(oldAlleleCount, newAlleleCount);
         final int[] alleleMap = new int[newAlleleCount];
@@ -93,7 +92,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
 
         final int[] genotypeIndexMap = calculator.newToOldGenotypeMap(alleleMap, calculators);
         Assert.assertNotNull(genotypeIndexMap);
-        Assert.assertEquals(genotypeIndexMap.length, GenotypeLikelihoodCalculators.genotypeCount(ploidy, newAlleleCount));
+        Assert.assertEquals(genotypeIndexMap.length, GenotypeIndexCalculator.genotypeCount(ploidy, newAlleleCount));
 
         final GenotypeLikelihoodCalculator oldCalculator = calculators.getInstance(ploidy, oldAlleleCount);
         final GenotypeLikelihoodCalculator newCalculator = calculators.getInstance(ploidy, newAlleleCount);
