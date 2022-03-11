@@ -70,7 +70,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
                     readGenotypeLikelihoods[r] = MathUtils.approximateLog10SumLog10(compoments) - Math.log10(ploidy);
                 }
                 final double genotypeLikelihood = MathUtils.sum(readGenotypeLikelihoods);
-                Assert.assertEquals(genotypeLikelihoodsDoubles[i], genotypeLikelihood, 0.0001);
+                Assert.assertEquals(genotypeLikelihoodsDoubles[i], genotypeLikelihood, 0.0001 * Math.abs(genotypeLikelihood));
             }
         }
     }
@@ -136,7 +136,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
         }
     }
 
-    private static final int[] MAXIMUM_ALLELE = { 1, 2, 5, 6, 8};
+    private static final int[] MAXIMUM_ALLELE = { 1, 2, 5, 6};
 
     private static final int[] PLOIDY = { 1, 2, 3, 20 };
 

@@ -2,8 +2,9 @@ package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.GenotypeLikelihoods;
-import org.apache.commons.lang3.mutable.MutableDouble;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.math3.util.FastMath;
+import org.apache.commons.lang3.tuple.Pair;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
@@ -140,12 +141,8 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
         final boolean triallelicGenotypesPossible = alleleCount > 2 && ploidy > 2;
 
         // non-log space likelihoods for multiallelic computation
-        // TODO: ditto
-        final double[][] nonLogLikelihoodsByAlleleAndRead = triallelicGenotypesPossible ? likelihoods.asRealMatrix().getData() : null;
-        final MutableDouble multiallelicNormalization = new MutableDouble(0);
-        if (triallelicGenotypesPossible) {
-            makeNormalizedNonLogLikelihoods(readCount, nonLogLikelihoodsByAlleleAndRead, multiallelicNormalization);
-        }
+        final Pair<double[][], Double> rescaledNonLogLikelihoodsAndCorrection = !triallelicGenotypesPossible ? null :
+                rescaledNonLogLikelihoods(readCount, likelihoods);
 
         final double[] result = new double[genotypeCount];
 
@@ -158,46 +155,63 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
                 result[genotypeIndex] = MathUtils.sum(likelihoodsByAlleleAndRead[allele]);
             } else if (componentCount == 2) {
                 // biallelic het case: log P(reads | nA copies of A, nB copies of B) = sum_{reads} (log[(nA * P(read | A) + nB * P(read | B))] -log(ploidy))
-                final double[] logLks1 = likelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(0)];
+                final double[] log10ReadLks1 = likelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(0)];
                 final int count1 = alleleCounts.alleleCountAt(0);
                 final double log10Count1 = MathUtils.log10(count1);
-                final double[] logLks2  = likelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(1)];
+                final double[] log10ReadLks2  = likelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(1)];
                 final double log10Count2 = MathUtils.log10(ploidy - count1);
 
-                result[genotypeIndex] = new IndexRange(0, readCount).sum(r -> MathUtils.approximateLog10SumLog10(logLks1[r] + log10Count1, logLks2[r] + log10Count2))
+                result[genotypeIndex] = new IndexRange(0, readCount).sum(r -> MathUtils.approximateLog10SumLog10(log10ReadLks1[r] + log10Count1, log10ReadLks2[r] + log10Count2))
                         - readCount * MathUtils.log10(ploidy);
             } else {
                 // the multiallelic case is conceptually the same as the biallelic case but done in non-log space
                 // We implement in a cache-friendly way by adding nA * P(read|A) to the per-read buffer for all reads (inner loop), and all alleles (outer loop)
                 Arrays.fill(perReadBuffer,0, readCount, 0);
-                alleleCounts.forEachAlleleIndexAndCount((a, f) -> new IndexRange(0, readCount).forEach(r -> perReadBuffer[r] += f * nonLogLikelihoodsByAlleleAndRead[a][r]));
-                result[genotypeIndex] = new IndexRange(0, readCount).sum(r -> FastMath.log10(perReadBuffer[r])) - readCount * MathUtils.log10(ploidy) + multiallelicNormalization.doubleValue();
+                final double[][] rescaledNonLogLikelihoods = rescaledNonLogLikelihoodsAndCorrection.getLeft();
+                final double log10Rescaling = rescaledNonLogLikelihoodsAndCorrection.getRight();
+                alleleCounts.forEachAlleleIndexAndCount((a, f) -> new IndexRange(0, readCount).forEach(r -> perReadBuffer[r] += f * rescaledNonLogLikelihoods[a][r]));
+                result[genotypeIndex] = new IndexRange(0, readCount).sum(r -> FastMath.log10(perReadBuffer[r])) - readCount * MathUtils.log10(ploidy) + log10Rescaling;
             }
         });
         return result;
     }
 
 
-    private void makeNormalizedNonLogLikelihoods(int readCount, double[][] likelihoodsByAlleleAndRead, final MutableDouble multiallelicNormalization) {
+    /**
+     * Given an input log10 log10Likelihoods matrix, subtract off the maximum of each read column so that each column's maximum is zero for numerical
+     * stability.  (This is akin to dividing each read column by its maximum in non-log space).  Then exponentiate to enter non-log space, mutating
+     * the log10Likelihoods matrix in-place.  Finally, record the sum of all log-10 subtractions, which is the total amount in log10 space
+     * that must later be added to the overall likelihood, which is a sum over all reads (product in npon-log space).
+     * @param readCount
+     * @param log10Likelihoods    and input log-10 likelihoods matrix
+     */
+    private <EVIDENCE, A extends Allele> Pair<double[][], Double> rescaledNonLogLikelihoods(final int readCount, final LikelihoodMatrix<EVIDENCE,A> log10Likelihoods) {
+        final double[][] log10LikelihoodsByAlleleAndRead = log10Likelihoods.asRealMatrix().getData();
         // fill the per-read buffer with the maximum log-likelihood per read
+        // note how we traverse by read for cache-friendliness
         Arrays.fill(perReadBuffer, 0, readCount, Double.NEGATIVE_INFINITY);
         for (int a = 0; a < alleleCount; a++) {
             for (int r = 0; r < readCount; r++) {
-                perReadBuffer[r] = FastMath.max(perReadBuffer[r], likelihoodsByAlleleAndRead[a][r]);
+                perReadBuffer[r] = FastMath.max(perReadBuffer[r], log10LikelihoodsByAlleleAndRead[a][r]);
             }
         }
 
         // subtract these maxima
         for (int a = 0; a < alleleCount; a++) {
             for (int r = 0; r < readCount; r++) {
-                likelihoodsByAlleleAndRead[a][r] -= perReadBuffer[r];
+                log10LikelihoodsByAlleleAndRead[a][r] -= perReadBuffer[r];
             }
         }
-        // switch to non-log now that we have moved to numerically safe zero-max space
-        new IndexRange(0, alleleCount).forEach(a -> MathUtils.applyToArrayInPlace(likelihoodsByAlleleAndRead[a], x -> Math.pow(10.0, x)));
 
-        // the normalization is the sum of all the subtracted-off maximum log likelihoods
-        multiallelicNormalization.setValue(MathUtils.sum(perReadBuffer, 0, readCount));
+        final double scaleFactor = MathUtils.sum(perReadBuffer, 0, readCount);
+
+        // switch to non-log now that we have rescaled for numerical stability
+        new IndexRange(0, alleleCount).forEach(a -> MathUtils.applyToArrayInPlace(log10LikelihoodsByAlleleAndRead[a], x -> Math.pow(10.0, x)));
+
+        // note that the variable name is now wrong
+        return ImmutablePair.of(log10LikelihoodsByAlleleAndRead, scaleFactor);
+
+
     }
 
     private void ensureReadCapacity(final int requestedCapacity) {
