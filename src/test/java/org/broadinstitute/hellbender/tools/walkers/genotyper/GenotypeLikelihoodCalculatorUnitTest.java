@@ -136,7 +136,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
         }
     }
 
-    private static final int[] MAXIMUM_ALLELE = { 1, 2, 5, 6 };
+    private static final int[] MAXIMUM_ALLELE = { 1, 2, 5, 6, 8};
 
     private static final int[] PLOIDY = { 1, 2, 3, 20 };
 
