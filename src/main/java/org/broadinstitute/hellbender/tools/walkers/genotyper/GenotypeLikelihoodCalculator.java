@@ -68,25 +68,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
      */
     private int readCapacity = INITIAL_READ_CAPACITY;
 
-    /**
-     * Buffer field used as a temporary container when one value per read is stored.
-     *
-     * In the multiallelic calculation we accumulate the likelihood contribution of each read one allele at a time.  That is,
-     * for genotype containing alleles A, B, C, we first fill the buffer with the likelihood contributions from allele A, then
-     * we make a second pass and add the contributions from allele B, then allele C.  Traversing all the reads in each
-     * allele row of the likelihoods array in this manner is cache-friendly and makes an enormous difference in runtime.
-     *
-     * The difference in performance comes from the fact that we index likelihoods first by allele, then by read.  Because of this,
-     * likelihoods of consecutive reads with the same allele are adjacent in memory while likelihoods of consecutive alleles with the same read
-     * are not.  In the former case looking up new likelihoods almost always results in a cache hit since many reads of the same allele
-     * are loaded on the same cache page.
-     *
-     * If the cache-friendliness of this class is broken, it will show up as a severe regression in the runtime of its unit tests
-     * for larger ploidies and allele counts.
-     */
-    private double[] perReadBuffer = new double[INITIAL_READ_CAPACITY];
-
-
     public GenotypeLikelihoodCalculator(final int ploidy, final int alleleCount, final GenotypeAlleleCounts[][] genotypeTableByPloidy) {
         genotypeAlleleCounts = genotypeTableByPloidy[ploidy];
         genotypeCount = GenotypeIndexCalculator.genotypeCount(ploidy, alleleCount);
@@ -158,16 +139,16 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
         Utils.nonNull(log10AlleleLikelihoods);
         Utils.validateArg(log10AlleleLikelihoods.numberOfAlleles() == alleleCount, "mismatch between allele list and alleleCount");
         final int readCount = log10AlleleLikelihoods.evidenceCount();
-        ensureReadCapacity(readCount);
 
         final double[][] log10LikelihoodsByAlleleAndRead = log10AlleleLikelihoods.asRealMatrix().getData();
 
         final boolean triallelicGenotypesPossible = alleleCount > 2 && ploidy > 2;
+        final double[] perReadBuffer = triallelicGenotypesPossible ? new double[readCount] : null;
 
         // non-log space log10AlleleLikelihoods for multiallelic computation requires rescaling for stability when we
         // exponentiate away the log, and we store the scaling factor to bring back later
         final Pair<double[][], Double> rescaledNonLogLikelihoodsAndCorrection = !triallelicGenotypesPossible ? null :
-                rescaledNonLogLikelihoods(readCount, log10AlleleLikelihoods);
+                rescaledNonLogLikelihoods(log10AlleleLikelihoods);
 
         final double[] result = new double[genotypeCount];
 
@@ -186,11 +167,13 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
                 final double[] log10ReadLks2  = log10LikelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(1)];
                 final double log10Count2 = MathUtils.log10(ploidy - count1);
 
+                // note: if you are reading the multiallelic case below and have gotten paranoid about cache efficiency,
+                // here the log10 likelihood matrix rows for *both* alleles are in the cache at once
                 result[genotypeIndex] = new IndexRange(0, readCount).sum(r -> MathUtils.approximateLog10SumLog10(log10ReadLks1[r] + log10Count1, log10ReadLks2[r] + log10Count2))
                         - readCount * MathUtils.log10(ploidy);
             } else {
                 // the multiallelic case is conceptually the same as the biallelic case but done in non-log space
-                // We implement in a cache-friendly way by adding nA * P(read|A) to the per-read buffer for all reads (inner loop), and all alleles (outer loop)
+                // We implement in a cache-friendly way by summing nA * P(read|A) over all alleles for each read, but iterating over reads as the inner loop
                 Arrays.fill(perReadBuffer,0, readCount, 0);
                 final double[][] rescaledNonLogLikelihoods = rescaledNonLogLikelihoodsAndCorrection.getLeft();
                 final double log10Rescaling = rescaledNonLogLikelihoodsAndCorrection.getRight();
@@ -207,28 +190,31 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
      * stability.  (This is akin to dividing each read column by its maximum in non-log space).  Then exponentiate to enter non-log space, mutating
      * the log10Likelihoods matrix in-place.  Finally, record the sum of all log-10 subtractions, which is the total amount in log10 space
      * that must later be added to the overall likelihood, which is a sum over all reads (product in npon-log space).
-     * @param readCount
      * @param log10Likelihoods    and input log-10 likelihoods matrix
      */
-    private <EVIDENCE, A extends Allele> Pair<double[][], Double> rescaledNonLogLikelihoods(final int readCount, final LikelihoodMatrix<EVIDENCE,A> log10Likelihoods) {
+    private <EVIDENCE, A extends Allele> Pair<double[][], Double> rescaledNonLogLikelihoods(final LikelihoodMatrix<EVIDENCE,A> log10Likelihoods) {
         final double[][] log10LikelihoodsByAlleleAndRead = log10Likelihoods.asRealMatrix().getData();
-        // fill the per-read buffer with the maximum log-likelihood per read
+
+        final int readCount = log10Likelihoods.evidenceCount();
+        final double[] perReadMaxima = new double[readCount];
+        Arrays.fill(perReadMaxima, 0, readCount, Double.NEGATIVE_INFINITY);
+
+        // find the maximum log-likelihood over all alleles for each read
         // note how we traverse by read for cache-friendliness
-        Arrays.fill(perReadBuffer, 0, readCount, Double.NEGATIVE_INFINITY);
         for (int a = 0; a < alleleCount; a++) {
             for (int r = 0; r < readCount; r++) {
-                perReadBuffer[r] = FastMath.max(perReadBuffer[r], log10LikelihoodsByAlleleAndRead[a][r]);
+                perReadMaxima[r] = FastMath.max(perReadMaxima[r], log10LikelihoodsByAlleleAndRead[a][r]);
             }
         }
 
         // subtract these maxima
         for (int a = 0; a < alleleCount; a++) {
             for (int r = 0; r < readCount; r++) {
-                log10LikelihoodsByAlleleAndRead[a][r] -= perReadBuffer[r];
+                log10LikelihoodsByAlleleAndRead[a][r] -= perReadMaxima[r];
             }
         }
 
-        final double scaleFactor = MathUtils.sum(perReadBuffer, 0, readCount);
+        final double scaleFactor = MathUtils.sum(perReadMaxima, 0, readCount);
 
         // switch to non-log now that we have rescaled for numerical stability
         new IndexRange(0, alleleCount).forEach(a -> MathUtils.applyToArrayInPlace(log10LikelihoodsByAlleleAndRead[a], x -> Math.pow(10.0, x)));
@@ -236,14 +222,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
         // note that the variable name is now wrong
         return ImmutablePair.of(log10LikelihoodsByAlleleAndRead, scaleFactor);
     }
-
-    private void ensureReadCapacity(final int requestedCapacity) {
-        if (readCapacity < requestedCapacity) {
-            readCapacity = 2 * requestedCapacity;
-            perReadBuffer = new double[readCapacity];
-        }
-    }
-
 
     // note that if the input has a high index that is not cached, it will be mutated in order to form the output
     private GenotypeAlleleCounts nextGenotypeAlleleCounts(final GenotypeAlleleCounts alleleCounts) {
