@@ -1,6 +1,7 @@
 package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
 import org.apache.commons.lang3.mutable.MutableInt;
+import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
@@ -48,7 +49,7 @@ public class GenotypeIndexCalculator {
      *     See discussion at https://genome.sph.umich.edu/wiki/Relationship_between_Ploidy,_Alleles_and_Genotypes
      */
     public static long indexOfFirstGenotypeWithAllele(final int ploidy, final int allele) {
-        return allele == 0 ? 0 : MathUtils.exactBinomialCoefficient(ploidy + allele - 1, allele - 1);
+        return allele == 0 ? 0 : CombinatoricsUtils.binomialCoefficient(ploidy + allele - 1, allele - 1);
     }
 
     /**

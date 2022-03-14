@@ -3,6 +3,7 @@ package org.broadinstitute.hellbender.utils;
 import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.commons.math3.random.RandomGenerator;
 import org.apache.commons.math3.random.RandomGeneratorFactory;
+import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.GATKBaseTest;
@@ -183,17 +184,6 @@ public final class MathUtilsUnitTest extends GATKBaseTest {
         Assert.assertEquals(MathUtils.binomialCoefficient(10, 3), 120.0, 1e-6);
         Assert.assertEquals(MathUtils.binomialCoefficient(20, 3), 1140.0, 1e-6);
         Assert.assertEquals(MathUtils.binomialCoefficient(100, 4), 3921225.0, 1e-6);
-    }
-
-    @Test
-    public void testExactBinomialCoefficient() {
-        Assert.assertEquals(MathUtils.exactBinomialCoefficient(4, 2), 6);
-        Assert.assertEquals(MathUtils.exactBinomialCoefficient(10, 3), 120);
-        Assert.assertEquals(MathUtils.exactBinomialCoefficient(20, 3), 1140);
-        Assert.assertEquals(MathUtils.exactBinomialCoefficient(20, 8), 125970);
-        Assert.assertEquals(MathUtils.exactBinomialCoefficient(100, 4), 3921225);
-        Assert.assertEquals(MathUtils.exactBinomialCoefficient(100, 96), 3921225);
-        Assert.assertEquals(MathUtils.exactBinomialCoefficient(100, 50), LONG_OVERFLOW);
     }
 
     @Test
