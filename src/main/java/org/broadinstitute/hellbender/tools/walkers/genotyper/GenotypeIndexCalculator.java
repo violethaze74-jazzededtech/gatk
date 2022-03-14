@@ -7,6 +7,23 @@ import org.broadinstitute.hellbender.utils.Utils;
 
 import java.util.Arrays;
 
+/**
+ * Utilities class for calculations involving the canonical enumeration of (unphased) genotypes.
+ *
+ * For diploid genotypes with alleles A, B, C. . . this ordering is AA, AB, BB, AC, BC, CC. . .
+ *
+ * For triploid genotypes it is AAA, AAB, ABB, BBB, AAC, ABC, BBC, ACC, BCC, CCC. . .
+ *
+ * Note that we may define the ordering recursively.  Letting g = {g_1,g_2,g_3. . .,g_N} and h = {h_1,h_2,h_3,h_N} = genotypes comprising
+ * alleles g_1,g_2,g_3 and h_1,h_2,h_3, respectively:
+ *    (i)   the order of haploid genotypes is simply the allele ordering
+ *    (ii)  if g_N < h_N then g < h
+ *    (iii) if g_N = h_N then the order is that of the first N-1 alleles
+ *
+ * Note also that whenever possible it is best to traverse all genotypes in the canonical order without the random index calculations
+ * provided here.  However, when subsetting, reordering, merging, and adding alleles it is necessary to translate indices from
+ * one basis of alleles to another.  In such cases efficient index calculations are important.
+ */
 public class GenotypeIndexCalculator {
 
     private GenotypeIndexCalculator() {}
@@ -54,9 +71,10 @@ public class GenotypeIndexCalculator {
 
     /**
      * Give a list of alleles, returns the likelihood array index.
+     *
      * @param alleles the indices of the alleles in the genotype, there should be as many repetition of an
      *                      index as copies of that allele in the genotype. Allele indices do not need to be sorted in
-     *                      any particular way.
+     *                      any particular way.  For example, {A,A,B}, {A,B,A}, {B,A,A} are all valid inputs.
      *
      * @return never {@code null}.
      */

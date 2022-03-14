@@ -18,6 +18,8 @@ import java.util.stream.IntStream;
 /**
  * Collection of allele counts for a genotype. It encompasses what alleles are present in the genotype and in what number.</p>
  *
+ * Also, it stores its index within the canonical ordering of genotypes and can efficiently generate the next genotype in that order. </p>
+ *
  * <p>Alleles are represented herein by their indices running from <b>0</b> to <b>N-1</b> where <i>N</i> is the number of alleles.</p>
  *
  * <p>Genotypes are represented as a single array of alternating alleles and counts, where only alleles with non-zero counts are included:
@@ -90,7 +92,7 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
     private final int ploidy;
 
     /**
-     * Sorted array of integer pairs as described in {@link #GenotypeAlleleCounts(int, int, int...)}.
+     * Sorted array of format {allele 1, count 1, allele 2, count 2. . .}, where allele1, allele2. . . are in order
      */
     private int[] sortedAlleleCounts;
 
@@ -100,7 +102,7 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
     private int distinctAlleleCount;
 
     /**
-     * Index of this genotype within genotypes of the same ploidy and number of alleles.
+     * Index of this genotype within genotypes of the same ploidy
      */
     private int index;
 
@@ -162,7 +164,7 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
     }
 
     /**
-     * Updates the genotype counts to match the next genotype according to the canonical ordering of PLs.
+     * Returns the next genotype allele counts object in the canonical ordering of genotypes.
      *
      * <p>
      *     This method must not be invoked on cached genotype-allele-counts that are meant to remain constant,

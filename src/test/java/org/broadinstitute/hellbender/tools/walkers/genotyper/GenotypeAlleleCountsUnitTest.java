@@ -264,7 +264,7 @@ public final class GenotypeAlleleCountsUnitTest {
 
         while (!next.containsAllele(MAXIMUM_ALLELE_INDEX + 1)) {
             final GenotypeAlleleCounts current = next.copy();
-            next.increase(1);
+            next.increase();
             assertEquals(next.minimumAlleleIndex(), next.maximumAlleleIndex());
             assertEquals(next.minimumAlleleIndex(), current.minimumAlleleIndex() + 1);
             assertEquals(next.alleleCountAt(0), 1);
