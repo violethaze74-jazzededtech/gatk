@@ -13,6 +13,31 @@ import org.broadinstitute.hellbender.utils.genotyper.LikelihoodMatrix;
 import java.util.Arrays;
 import java.util.Iterator;
 
+/**
+ * This class has just one fundamental responsibility: calculating genotype likelihoods through the formula:
+ *
+ * Prob(reads | genotype) = product_{all reads} [[sum_{alleles in genotype} Prob(read | allele)]/ploidy]
+ *
+ * Note that this applies to non-somatic variant calling, where ploidy is a known integer and genotypes are given by the
+ * number of copies of each allele.
+ *
+ * There is some unfortunate mixing-in of getting cached GenotypeAlleleCounts objects that will hopefully be improved
+ * in future refactoring.
+ *
+ * COMPUTATIONAL NOTE
+ * In the multiallelic calculation we accumulate the likelihood contribution of each read one allele at a time.  That is,
+ * for genotype containing alleles A, B, C, we first fill an array with the likelihood contributions from allele A, then
+ * we make a second pass and add the contributions from allele B, then allele C.  Traversing all the reads in each
+ * allele row of the likelihoods array in this manner is cache-friendly and makes an enormous difference in runtime.
+ *
+ * The difference in performance comes from the fact that we index likelihoods first by allele, then by read.  Because of this,
+ * likelihoods of consecutive reads with the same allele are adjacent in memory while likelihoods of consecutive alleles with the same read
+ * are not.  In the former case looking up new likelihoods almost always results in a cache hit since many reads of the same allele
+ * are loaded on the same cache page.
+ *
+ * If the cache-friendliness of this class is broken, it will show up as a severe regression in the runtime of its unit tests
+ * for larger ploidies and allele counts.
+ */
 public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCounts> {
     /**
      * Genotype table for this calculator.
