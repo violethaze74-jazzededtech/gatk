@@ -13,6 +13,7 @@ import org.broadinstitute.barclay.help.DocumentedFeature;
 import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
 import org.broadinstitute.hellbender.cmdline.programgroups.StructuralVariantDiscoveryProgramGroup;
 import org.broadinstitute.hellbender.engine.*;
+import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.spark.sv.utils.GATKSVVCFConstants;
 import org.broadinstitute.hellbender.tools.sv.*;
@@ -24,6 +25,7 @@ import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.gcs.BucketUtils;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.charset.Charset;
 import java.nio.file.Paths;
 import java.util.*;
@@ -216,6 +218,7 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
 
     private FeatureDataSource<BafEvidence> bafSource;
     private BafEvidenceAggregator bafCollector;
+    private BafEvidenceTester bafEvidenceTester;
 
     private Map<String,Double> sampleCoverageMap;
     private Set<String> samples;
@@ -240,7 +243,7 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
             throw new UserException("Reference sequence dictionary required");
         }
         samples = new LinkedHashSet<>(getHeaderForVariants().getSampleNamesInOrder());
-        if (!splitReadCollectionEnabled() && !discordantPairCollectionEnabled()) {
+        if (!splitReadCollectionEnabled() && !discordantPairCollectionEnabled() && !bafCollectionEnabled()) {
             throw new UserException.BadInput("At least one evidence file must be provided");
         }
         loadSampleCoverage();
@@ -249,6 +252,9 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
         }
         if (splitReadCollectionEnabled()) {
             initializeSplitReadCollection();
+        }
+        if (bafCollectionEnabled()) {
+            initializeBAFCollection();
         }
         discordantPairIntervals = new ArrayList<>();
         splitReadIntervals = new ArrayList<>();
@@ -288,6 +294,12 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
     private void initializeBAFCollection() {
         initializeBAFEvidenceDataSource();
         bafCollector = new BafEvidenceAggregator(bafSource, dictionary, bafMinSize, bafPaddingFraction);
+        bafEvidenceTester = new BafEvidenceTester(dictionary);
+        try {
+            printStream = new PrintStream("/Users/markw/Work/talkowski/sv-pipe-testing/mw-sv-agg/baftest/baf_out.tsv");
+        } catch (final IOException e) {
+            throw new GATKException("", e);
+        }
     }
 
     private void initializeDiscordantPairDataSource() {
@@ -352,18 +364,31 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
     public void firstPassApply(final VariantContext variant, final ReadsContext readsContext,
                       final ReferenceContext referenceContext, final FeatureContext featureContext) {
         final SVCallRecord call = SVCallRecordUtils.create(variant);
-        discordantPairIntervals.add(discordantPairCollector.getEvidenceQueryInterval(call));
-        splitReadIntervals.add(startSplitCollector.getEvidenceQueryInterval(call));
-        final SimpleInterval bafInterval = bafCollector.getEvidenceQueryInterval(call);
-        if (bafInterval != null) {
-            bafIntervals.add(bafInterval);
+        if (discordantPairCollectionEnabled()) {
+            discordantPairIntervals.add(discordantPairCollector.getEvidenceQueryInterval(call));
+        }
+        if (splitReadCollectionEnabled()) {
+            splitReadIntervals.add(startSplitCollector.getEvidenceQueryInterval(call));
+        }
+        if (bafCollectionEnabled()) {
+            final SimpleInterval bafInterval = bafCollector.getEvidenceQueryInterval(call);
+            if (bafInterval != null) {
+                bafIntervals.add(bafInterval);
+            }
         }
     }
 
     @Override
     public void afterFirstPass() {
-        discordantPairCollector.setCacheIntervals(discordantPairIntervals);
-        startSplitCollector.setCacheIntervals(splitReadIntervals);
+        if (discordantPairCollectionEnabled()) {
+            discordantPairCollector.setCacheIntervals(discordantPairIntervals);
+        }
+        if (splitReadCollectionEnabled()) {
+            startSplitCollector.setCacheIntervals(splitReadIntervals);
+        }
+        if (bafCollectionEnabled()) {
+            bafCollector.setCacheIntervals(bafIntervals);
+        }
     }
 
     /**
@@ -394,6 +419,9 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
         }
     }
 
+    //TODO for debugging
+    private PrintStream printStream;
+
     @Override
     public void secondPassApply(final VariantContext variant, final ReadsContext readsContext,
                                 final ReferenceContext referenceContext, final FeatureContext featureContext) {
@@ -418,6 +446,10 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
                 final List<SplitReadEvidence> startSplitReadEvidence = startSplitCollector.collectEvidence(record);
                 final List<SplitReadEvidence> endSplitReadEvidence = endSplitCollector.collectEvidence(record);
                 record = breakpointRefiner.refineCall(record, startSplitReadEvidence, endSplitReadEvidence, excludedSamples);
+            }
+            if (bafCollectionEnabled()) {
+                final List<BafEvidence> bafEvidence = bafCollector.collectEvidence(record);
+                bafEvidenceTester.calculateLogLikelihood(record, bafEvidence, excludedSamples, printStream);
             }
         }
         outputBuffer.add(SVCallRecordUtils.getVariantBuilder(record).make());
@@ -474,5 +506,9 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
 
     private boolean discordantPairCollectionEnabled() {
         return discordantPairsFile != null;
+    }
+
+    private boolean bafCollectionEnabled() {
+        return bafFile != null;
     }
 }
