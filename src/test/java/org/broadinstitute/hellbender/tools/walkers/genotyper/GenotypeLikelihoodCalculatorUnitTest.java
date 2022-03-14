@@ -52,7 +52,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
         final int sampleCount = readCount.length;
         for (int s = 0; s < sampleCount ; s++) {
             final LikelihoodMatrix<GATKRead, Allele> sampleLikelihoods = readLikelihoods.sampleMatrix(s);
-            final GenotypeLikelihoods genotypeLikelihoods = calculator.genotypeLikelihoods(sampleLikelihoods);
+            final GenotypeLikelihoods genotypeLikelihoods = calculator.log10GenotypeLikelihoods(sampleLikelihoods);
             final double[] genotypeLikelihoodsDoubles = genotypeLikelihoods.getAsVector();
             Assert.assertEquals(genotypeLikelihoodsDoubles.length, genotypeCount);
             for (int i = 0; i < testGenotypeCount; i++) {

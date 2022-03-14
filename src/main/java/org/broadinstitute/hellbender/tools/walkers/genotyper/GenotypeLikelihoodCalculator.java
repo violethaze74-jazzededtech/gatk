@@ -87,8 +87,7 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
     private double[] perReadBuffer = new double[INITIAL_READ_CAPACITY];
 
 
-    public GenotypeLikelihoodCalculator(final int ploidy, final int alleleCount,
-                                        final GenotypeAlleleCounts[][] genotypeTableByPloidy) {
+    public GenotypeLikelihoodCalculator(final int ploidy, final int alleleCount, final GenotypeAlleleCounts[][] genotypeTableByPloidy) {
         genotypeAlleleCounts = genotypeTableByPloidy[ploidy];
         genotypeCount = GenotypeIndexCalculator.genotypeCount(ploidy, alleleCount);
         this.alleleCount = alleleCount;
@@ -134,40 +133,41 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
     }
 
     /**
-     * Calculate the likelihoods given the list of alleles and the likelihood map.
+     * Calculate the log10AlleleLikelihoods given the list of alleles and the likelihood map.
      *
-     * @param likelihoods the likelihood matrix all alleles vs all reads.
+     * @param log10AlleleLikelihoods the likelihood matrix all alleles vs all reads.
      *
-     * @throws IllegalArgumentException if {@code alleleList} is {@code null} or {@code likelihoods} is {@code null}
+     * @throws IllegalArgumentException if {@code alleleList} is {@code null} or {@code log10AlleleLikelihoods} is {@code null}
      *     or the alleleList size does not match the allele-count of this calculator, or there are missing allele vs
-     *     read combinations in {@code likelihoods}.
+     *     read combinations in {@code log10AlleleLikelihoods}.
      *
      * @return never {@code null}.
      */
-    public <EVIDENCE, A extends Allele> GenotypeLikelihoods genotypeLikelihoods(final LikelihoodMatrix<EVIDENCE, A> likelihoods) {
-        final double[] readLikelihoodsByGenotypeIndex = getReadRawReadLikelihoodsByGenotypeIndex(likelihoods);
-        return GenotypeLikelihoods.fromLog10Likelihoods(readLikelihoodsByGenotypeIndex);
+    public <EVIDENCE, A extends Allele> GenotypeLikelihoods log10GenotypeLikelihoods(final LikelihoodMatrix<EVIDENCE, A> log10AlleleLikelihoods) {
+        final double[] log10GenotypeLikelihoods = computeLog10GenotypeLikelihoods(log10AlleleLikelihoods);
+        return GenotypeLikelihoods.fromLog10Likelihoods(log10GenotypeLikelihoods);
     }
 
     /**
-     * A helper method that actually does the matrix operations but returns the raw values.
+     * Compute the genotype log10 likelihoods as an array in the canonical genotype order.  That is, result[i] = Pr(reads | ith genotype)
      *
-     * @param likelihoods   log 10 likelihood matrix indexed by allele, then read
-     * @return the raw array (in log10 likelihoods space) of the GL for each genotype
+     * @param log10AlleleLikelihoods   log 10 likelihood matrix indexed by allele, then read
+     * @return the log 10 likelihood of each genotype as an array
      */
-    <EVIDENCE, A extends Allele> double[] getReadRawReadLikelihoodsByGenotypeIndex(final LikelihoodMatrix<EVIDENCE, A> likelihoods) {
-        Utils.nonNull(likelihoods);
-        Utils.validateArg(likelihoods.numberOfAlleles() == alleleCount, "mismatch between allele list and alleleCount");
-        final int readCount = likelihoods.evidenceCount();
+    <EVIDENCE, A extends Allele> double[] computeLog10GenotypeLikelihoods(final LikelihoodMatrix<EVIDENCE, A> log10AlleleLikelihoods) {
+        Utils.nonNull(log10AlleleLikelihoods);
+        Utils.validateArg(log10AlleleLikelihoods.numberOfAlleles() == alleleCount, "mismatch between allele list and alleleCount");
+        final int readCount = log10AlleleLikelihoods.evidenceCount();
         ensureReadCapacity(readCount);
 
-        final double[][] likelihoodsByAlleleAndRead = likelihoods.asRealMatrix().getData();
+        final double[][] log10LikelihoodsByAlleleAndRead = log10AlleleLikelihoods.asRealMatrix().getData();
 
         final boolean triallelicGenotypesPossible = alleleCount > 2 && ploidy > 2;
 
-        // non-log space likelihoods for multiallelic computation
+        // non-log space log10AlleleLikelihoods for multiallelic computation requires rescaling for stability when we
+        // exponentiate away the log, and we store the scaling factor to bring back later
         final Pair<double[][], Double> rescaledNonLogLikelihoodsAndCorrection = !triallelicGenotypesPossible ? null :
-                rescaledNonLogLikelihoods(readCount, likelihoods);
+                rescaledNonLogLikelihoods(readCount, log10AlleleLikelihoods);
 
         final double[] result = new double[genotypeCount];
 
@@ -177,13 +177,13 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
             if (componentCount == 1) {
                 // homozygous case: log P(reads|AAAAA. . .) = sum_{reads} log P(read|A)
                 final int allele = alleleCounts.alleleIndexAt(0);
-                result[genotypeIndex] = MathUtils.sum(likelihoodsByAlleleAndRead[allele]);
+                result[genotypeIndex] = MathUtils.sum(log10LikelihoodsByAlleleAndRead[allele]);
             } else if (componentCount == 2) {
                 // biallelic het case: log P(reads | nA copies of A, nB copies of B) = sum_{reads} (log[(nA * P(read | A) + nB * P(read | B))] -log(ploidy))
-                final double[] log10ReadLks1 = likelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(0)];
+                final double[] log10ReadLks1 = log10LikelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(0)];
                 final int count1 = alleleCounts.alleleCountAt(0);
                 final double log10Count1 = MathUtils.log10(count1);
-                final double[] log10ReadLks2  = likelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(1)];
+                final double[] log10ReadLks2  = log10LikelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(1)];
                 final double log10Count2 = MathUtils.log10(ploidy - count1);
 
                 result[genotypeIndex] = new IndexRange(0, readCount).sum(r -> MathUtils.approximateLog10SumLog10(log10ReadLks1[r] + log10Count1, log10ReadLks2[r] + log10Count2))
@@ -235,8 +235,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
 
         // note that the variable name is now wrong
         return ImmutablePair.of(log10LikelihoodsByAlleleAndRead, scaleFactor);
-
-
     }
 
     private void ensureReadCapacity(final int requestedCapacity) {

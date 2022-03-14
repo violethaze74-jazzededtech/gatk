@@ -146,7 +146,7 @@ public class DRAGENGenotypesModel implements GenotypingModel {
 
             // this is the data array for the read likelihoods without any trouble
             final LikelihoodMatrix<GATKRead, A> sampleLikelihoods = alleleLikelihoodMatrixMapper.mapAlleles(data.readLikelihoods().sampleMatrix(sampleIndex));
-            final double[] ploidyModelGenotypeLikelihoods = likelihoodsCalculator.getReadRawReadLikelihoodsByGenotypeIndex(sampleLikelihoods);
+            final double[] ploidyModelGenotypeLikelihoods = likelihoodsCalculator.computeLog10GenotypeLikelihoods(sampleLikelihoods);
 
             if (HaplotypeCallerGenotypingDebugger.isEnabled()) {
                 HaplotypeCallerGenotypingDebugger.println("\n Standard Genotyping Likelihoods Results:");

@@ -59,7 +59,7 @@ public final class IndependentSampleGenotypesModel implements GenotypingModel {
             }
 
             final LikelihoodMatrix<GATKRead, A> sampleLikelihoods = alleleLikelihoodMatrixMapper.mapAlleles(data.readLikelihoods().sampleMatrix(i));
-            genotypeLikelihoods.add(likelihoodsCalculator.genotypeLikelihoods(sampleLikelihoods));
+            genotypeLikelihoods.add(likelihoodsCalculator.log10GenotypeLikelihoods(sampleLikelihoods));
         }
         return new GenotypingLikelihoods<>(genotypingAlleles, ploidyModel, genotypeLikelihoods);
     }
