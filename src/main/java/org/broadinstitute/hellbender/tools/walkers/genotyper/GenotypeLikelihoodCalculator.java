@@ -38,22 +38,13 @@ import java.util.Arrays;
  * for larger ploidies and allele counts.
  */
 public class GenotypeLikelihoodCalculator {
-    /**
-     * Genotype table for this calculator.
-     *
-     * <p>It is ensure that it contains all the genotypes for this calculator ploidy and allele count, maybe more. For
-     * that reason you must use {@link #genotypeCount} when iterating through this array and not relay on its length.</p>
-     */
-    private final GenotypeAlleleCounts[] genotypeAlleleCounts;
-
     final int genotypeCount;
 
     final int alleleCount;
 
     final int ploidy;
 
-    public GenotypeLikelihoodCalculator(final int ploidy, final int alleleCount, final GenotypeAlleleCounts[][] genotypeTableByPloidy) {
-        genotypeAlleleCounts = genotypeTableByPloidy[ploidy];
+    public GenotypeLikelihoodCalculator(final int ploidy, final int alleleCount) {
         genotypeCount = GenotypeIndexCalculator.genotypeCount(ploidy, alleleCount);
         this.alleleCount = alleleCount;
         this.ploidy = ploidy;

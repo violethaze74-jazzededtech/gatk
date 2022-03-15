@@ -4,8 +4,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.utils.Utils;
 
-import java.util.Iterator;
-
 /**
  * This class holds caches of {@link GenotypeAlleleCounts} for multiple fixed ploidy, allele count pairs,
  * allowing for fast random access of genotypes.  Note that the increment method of GenotypeAlleleCounts is always fast,
@@ -102,8 +100,7 @@ public final class GenotypesCache {
      * @return never {@code null}.
      */
     public synchronized GenotypeLikelihoodCalculator getInstance(final int ploidy, final int alleleCount) {
-        ensureCapacity(alleleCount, ploidy);
-        return new GenotypeLikelihoodCalculator(ploidy, alleleCount, caches);
+        return new GenotypeLikelihoodCalculator(ploidy, alleleCount);
     }
 
     /**
@@ -118,8 +115,7 @@ public final class GenotypesCache {
      */
     public synchronized GenotypeLikelihoodCalculatorDRAGEN getInstanceDRAGEN(final int ploidy, final int alleleCount) {
         Utils.validate(ploidy == 2, "DRAGEN genotyping mode currently only supports diploid samples");
-        //ensureCapacity(alleleCount, ploidy);
-        return new GenotypeLikelihoodCalculatorDRAGEN(ploidy, alleleCount, caches);
+        return new GenotypeLikelihoodCalculatorDRAGEN(ploidy, alleleCount);
     }
 
 

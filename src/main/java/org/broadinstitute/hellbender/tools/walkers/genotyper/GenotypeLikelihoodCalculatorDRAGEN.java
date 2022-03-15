@@ -37,9 +37,8 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
     /**
      * Creates a new calculator providing its ploidy and number of genotyping alleles.
      */
-    protected GenotypeLikelihoodCalculatorDRAGEN(final int ploidy, final int alleleCount,
-                                                 final GenotypeAlleleCounts[][] genotypeTableByPloidy) {
-        super(ploidy, alleleCount, genotypeTableByPloidy);
+    protected GenotypeLikelihoodCalculatorDRAGEN(final int ploidy, final int alleleCount) {
+        super(ploidy, alleleCount);
         Utils.validateArg(ploidy > 0, () -> "ploidy must be at least 1 but was " + ploidy);
         // The number of possible components is limited by distinct allele count and ploidy.
         cachedLog10ErrorRate = Math.log10(BQD_FIXED_ERROR_RATE);
