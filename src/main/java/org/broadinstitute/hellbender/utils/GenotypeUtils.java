@@ -174,7 +174,7 @@ public final class GenotypeUtils {
 
         final int[] PLs = new int[GenotypeIndexCalculator.genotypeCount(2, nAlleles)];
         //TODO: replace with GenotypesCache::iterator
-        for (final GenotypeAlleleCounts gac : GL_CALCS.getInstance(2, nAlleles)) {
+        for (final GenotypeAlleleCounts gac : GenotypeAlleleCounts.iterable(2, nAlleles)) {
                 PLs[gac.index()] = gac.index() == 0 ? homRefLikelihood : (gac.containsAllele(0) ? hetLikelihood : homVarLikelihood);
         }
 

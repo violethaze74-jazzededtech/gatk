@@ -42,7 +42,6 @@ public final class GnarlyGenotyperEngine {
 
     // cache the ploidy 2 PL array sizes for increasing numbers of alts up to the maximum of maxAltAllelesToOutput
     private int[] likelihoodSizeCache;
-    private final ArrayList<GenotypeLikelihoodCalculator> glcCache = new ArrayList<>();
     private Set<Class<? extends InfoFieldAnnotation>> allASAnnotations;
 
     private final int maxAltAllelesToOutput;
@@ -58,15 +57,11 @@ public final class GnarlyGenotyperEngine {
         this.stripASAnnotations = stripASAnnotations;
 
         if (!summarizePls) {
-            final GenotypesCache GLCprovider = new GenotypesCache();
 
             //initialize PL size cache -- HTSJDK cache only goes up to 4 alts, but I need 6
             likelihoodSizeCache = new int[maxAltAllelesToOutput + 1 + 1]; //+1 for ref and +1 so index == numAlleles
-            glcCache.add(null); //add a null at index zero because zero alleles (incl. ref) makes no sense
             for (final int numAlleles : IntStream.rangeClosed(1, maxAltAllelesToOutput + 1).boxed().collect(Collectors.toList())) {
                 likelihoodSizeCache[numAlleles] = GenotypeLikelihoods.numLikelihoods(numAlleles, ASSUMED_PLOIDY);
-                //GL calculator cache is indexed by the total number of alleles, including ref
-                glcCache.add(numAlleles, GLCprovider.getInstance(ASSUMED_PLOIDY, numAlleles));
             }
         }
 

@@ -24,15 +24,11 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
     @Test(dataProvider = "ploidyAndMaximumAlleleAndReadCountsData")
     public void testLikelihoodCalculation(final int ploidy, final int alleleCount, final int[] readCount) {
         final AlleleLikelihoods<GATKRead, Allele> readLikelihoods = ReadLikelihoodsUnitTester.readLikelihoods(alleleCount, readCount);
-        final GenotypeLikelihoodCalculator calculator = new GenotypesCache().getInstance(ploidy, alleleCount);
-        final int genotypeCount = calculator.genotypeCount();
-        final int testGenotypeCount = Math.min(30000, genotypeCount);
         final int sampleCount = readCount.length;
         for (int s = 0; s < sampleCount ; s++) {
             final LikelihoodMatrix<GATKRead, Allele> sampleLikelihoods = readLikelihoods.sampleMatrix(s);
-            final GenotypeLikelihoods genotypeLikelihoods = calculator.log10GenotypeLikelihoods(sampleLikelihoods);
+            final GenotypeLikelihoods genotypeLikelihoods = GenotypeLikelihoodCalculator.log10GenotypeLikelihoods(ploidy, sampleLikelihoods);
             final double[] genotypeLikelihoodsDoubles = genotypeLikelihoods.getAsVector();
-            Assert.assertEquals(genotypeLikelihoodsDoubles.length, genotypeCount);
             for (final GenotypeAlleleCounts gac : GenotypeAlleleCounts.iterable(ploidy, alleleCount)) {
                 Assert.assertNotNull(genotypeLikelihoods);
                 final double[] readGenotypeLikelihoods = new double[sampleLikelihoods.evidenceCount()];
@@ -49,57 +45,6 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
                 final double genotypeLikelihood = MathUtils.sum(readGenotypeLikelihoods);
                 Assert.assertEquals(genotypeLikelihoodsDoubles[gac.index()], genotypeLikelihood, 0.0001 * Math.abs(genotypeLikelihood));
             }
-        }
-    }
-
-    @Test(dataProvider = "ploidyAndMaximumAlleleAndNewMaximumAlleleData")
-    public void testGenotypeIndexMap(final int ploidy, final int oldAlleleCount, final int newAlleleCount) {
-
-        // TODO: placeholder to cause failure because this method does not belong in this class
-        Assert.assertTrue(false);
-
-
-        Utils.resetRandomGenerator();
-        final Random rnd = Utils.getRandomGenerator();
-        final int maxAlleleCount = Math.max(oldAlleleCount, newAlleleCount);
-        final int[] alleleMap = new int[newAlleleCount];
-        final Map<Integer,Set<Integer>> reverseMap = new LinkedHashMap<>(oldAlleleCount);
-        for (int i = 0; i < alleleMap.length; i++) {
-            alleleMap[i] = rnd.nextInt(oldAlleleCount);
-            if (reverseMap.get(alleleMap[i]) == null) reverseMap.put(alleleMap[i],new LinkedHashSet<>(6));
-            reverseMap.get(alleleMap[i]).add(i);
-        }
-        final GenotypesCache calculators = new GenotypesCache();
-        final GenotypeLikelihoodCalculator calculator = calculators.getInstance(ploidy, maxAlleleCount);
-
-        final int[] genotypeIndexMap = calculator.newToOldGenotypeMap(alleleMap, calculators);
-        Assert.assertNotNull(genotypeIndexMap);
-        Assert.assertEquals(genotypeIndexMap.length, GenotypeIndexCalculator.genotypeCount(ploidy, newAlleleCount));
-
-        final GenotypeLikelihoodCalculator oldCalculator = calculators.getInstance(ploidy, oldAlleleCount);
-        final GenotypeLikelihoodCalculator newCalculator = calculators.getInstance(ploidy, newAlleleCount);
-
-        for (int i = 0; i < genotypeIndexMap.length; i++) {
-            final GenotypeAlleleCounts oldCounts = null;
-                    //oldCalculator.genotypeAlleleCountsAt(genotypeIndexMap[i]);
-            final GenotypeAlleleCounts newCounts = null;
-                    //newCalculator.genotypeAlleleCountsAt(i);
-            final int[] reverseCounts = new int[oldAlleleCount];
-            for (int j = 0; j < newCounts.distinctAlleleCount(); j++) {
-                final int newIndex = newCounts.alleleIndexAt(j);
-                final int newRepeats = newCounts.alleleCountAt(j);
-                final int expectedOldIndex = alleleMap[newIndex];
-                final int oldIndexRank = oldCounts.alleleRankFor(expectedOldIndex);
-                Assert.assertNotEquals(oldIndexRank, -1);
-                final int oldIndex = oldCounts.alleleIndexAt(oldIndexRank);
-                final int oldRepeats = oldCounts.alleleCountAt(oldIndexRank);
-                Assert.assertEquals(oldIndex, expectedOldIndex);
-                // not necessarily the same count if two or more new alleles map the same old allele.
-                Assert.assertTrue(oldRepeats >= newRepeats);
-                reverseCounts[oldIndex] += newRepeats;
-            }
-            for (int j = 0; j < oldAlleleCount; j++)
-                Assert.assertEquals(oldCounts.alleleCountFor(j), reverseCounts[j]);
         }
     }
 
@@ -124,15 +69,5 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
                 for (final int[] k : READ_COUNTS)
                 result[index++] = new Object[] { i, j, k };
         return result;
-    }
-
-    @DataProvider(name="ploidyAndMaximumAlleleAndNewMaximumAlleleData")
-    public Object[][] ploidyAndMaximumAlleleAndNewMaximumAlleleData() {
-        final List<Object[]> result = new ArrayList<>(PLOIDY.length * MAXIMUM_ALLELE.length * 20);
-        for (final int i : PLOIDY)
-            for (final int j : MAXIMUM_ALLELE)
-                for (int k = 0; k < (i < 10? j * 2 : j + 1); k++)
-                    result.add(new Object[] { i, j, k });
-        return result.toArray(new Object[result.size()][]);
     }
 }

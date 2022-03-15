@@ -88,37 +88,6 @@ public final class GenotypesCache {
         return result;
     }
 
-
-    /**
-     * Returns an instance given its ploidy and the number of alleles.
-     *
-     * @param alleleCount the required allele-count.
-     * @param ploidy the required ploidy-count.
-     *
-     * @throws IllegalArgumentException if either {@code ploidy} or {@code alleleCount} is negative, or the resulting number of genotypes is too large.
-     *
-     * @return never {@code null}.
-     */
-    public synchronized GenotypeLikelihoodCalculator getInstance(final int ploidy, final int alleleCount) {
-        return new GenotypeLikelihoodCalculator(ploidy, alleleCount);
-    }
-
-    /**
-     * Returns an instance of the DRAGEN genotypeLikelihoodCalculator given its ploidy and the number of alleles.
-     *
-     * @param alleleCount the required allele-count.
-     * @param ploidy the required ploidy-count.
-     *
-     * @throws IllegalArgumentException if either {@code ploidy} or {@code alleleCount} is negative, or the resulting number of genotypes is too large.
-     *
-     * @return never {@code null}.
-     */
-    public synchronized GenotypeLikelihoodCalculatorDRAGEN getInstanceDRAGEN(final int ploidy, final int alleleCount) {
-        Utils.validate(ploidy == 2, "DRAGEN genotyping mode currently only supports diploid samples");
-        return new GenotypeLikelihoodCalculatorDRAGEN(ploidy, alleleCount);
-    }
-
-
     /**
      * Update cache if necessary
      */

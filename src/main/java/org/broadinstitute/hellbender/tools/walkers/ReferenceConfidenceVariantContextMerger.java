@@ -13,6 +13,7 @@ import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.Alle
 import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.ReducibleAnnotationData;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.AlleleSubsettingUtils;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeAssignmentMethod;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeLikelihoodCalculator;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypesCache;
 import org.broadinstitute.hellbender.tools.walkers.mutect.filtering.Mutect2FilteringEngine;
 import org.broadinstitute.hellbender.utils.GenotypeUtils;
@@ -34,7 +35,6 @@ import java.util.stream.Stream;
 @SuppressWarnings({"rawtypes","unchecked"}) //TODO fix uses of untyped Comparable.
 public final class ReferenceConfidenceVariantContextMerger {
 
-    private static final GenotypesCache calculators = new GenotypesCache();
     private static VCFHeader vcfInputHeader = null;
     protected final VariantAnnotatorEngine annotatorEngine;
     private final boolean doSomaticMerge;
@@ -542,7 +542,7 @@ public final class ReferenceConfidenceVariantContextMerger {
                     // lazy initialization of the genotype index map by ploidy.
                     int[]  perSampleIndexesOfRelevantAlleles = AlleleSubsettingUtils.getIndexesOfRelevantAllelesForGVCF(remappedAlleles, targetAlleles, vc.getStart(), g, false);
                     final int[] genotypeIndexMapByPloidy = genotypeIndexMapsByPloidy[ploidy] == null
-                            ? calculators.getInstance(ploidy, maximumAlleleCount).newToOldGenotypeMap(perSampleIndexesOfRelevantAlleles, calculators) //probably horribly slow
+                            ? GenotypeLikelihoodCalculator.newToOldGenotypeMap(ploidy, perSampleIndexesOfRelevantAlleles) //probably horribly slow
                             : genotypeIndexMapsByPloidy[ploidy];
                     final int[] PLs = generatePL(g, genotypeIndexMapByPloidy);
                     final int[] AD = g.hasAD() ? AlleleSubsettingUtils.generateAD(g.getAD(), perSampleIndexesOfRelevantAlleles) : null;

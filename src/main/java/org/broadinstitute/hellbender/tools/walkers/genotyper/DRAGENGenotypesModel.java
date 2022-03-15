@@ -105,7 +105,6 @@ public class DRAGENGenotypesModel implements GenotypingModel {
         final int alleleCount = genotypingAlleles.numberOfAlleles();
         final int variantOffset = data.readLikelihoods().getVariantCallingSubsetApplied().getStart() + allelePadding;
 
-        GenotypeLikelihoodCalculatorDRAGEN likelihoodsCalculator = getLikelihoodsCalculator(ploidyModel.samplePloidy(0), alleleCount); //TODO this needs to change
         for (int sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {
 
             ///////////////////////////////////////////////////////////////////////////
@@ -139,14 +138,9 @@ public class DRAGENGenotypesModel implements GenotypingModel {
             // Compute default likelihoods as normal (before we go ahead and alter the likelihoods for the call)
             final int samplePloidy = ploidyModel.samplePloidy(sampleIndex);
 
-            // get a new likelihoodsCalculator if this sample's ploidy differs from the previous sample's
-            if (samplePloidy != likelihoodsCalculator.ploidy()) {
-                likelihoodsCalculator = getLikelihoodsCalculator(samplePloidy, alleleCount);
-            }
-
             // this is the data array for the read likelihoods without any trouble
             final LikelihoodMatrix<GATKRead, A> sampleLikelihoods = alleleLikelihoodMatrixMapper.mapAlleles(data.readLikelihoods().sampleMatrix(sampleIndex));
-            final double[] ploidyModelGenotypeLikelihoods = likelihoodsCalculator.computeLog10GenotypeLikelihoods(sampleLikelihoods);
+            final double[] ploidyModelGenotypeLikelihoods = GenotypeLikelihoodCalculator.computeLog10GenotypeLikelihoods(samplePloidy, sampleLikelihoods);
 
             if (HaplotypeCallerGenotypingDebugger.isEnabled()) {
                 HaplotypeCallerGenotypingDebugger.println("\n Standard Genotyping Likelihoods Results:");
@@ -155,12 +149,12 @@ public class DRAGENGenotypesModel implements GenotypingModel {
 
             if (computeBQD) {
                 applyLikelihoodsAdjusmentToBaseline(ploidyModelGenotypeLikelihoods, "BQD",
-                likelihoodsCalculator.calculateBQDLikelihoods(sampleLikelihoods, strandForward, strandReverse,
+                GenotypeLikelihoodCalculatorDRAGEN.calculateBQDLikelihoods(samplePloidy, sampleLikelihoods, strandForward, strandReverse,
                         paddedReference, offsetForRefIntoEvent));
             }
             if (computeFRD) {
                 applyLikelihoodsAdjusmentToBaseline(ploidyModelGenotypeLikelihoods, "FRD",
-                        likelihoodsCalculator.calculateFRDLikelihoods(sampleLikelihoods, ploidyModelGenotypeLikelihoods,
+                        GenotypeLikelihoodCalculatorDRAGEN.calculateFRDLikelihoods(samplePloidy, sampleLikelihoods, ploidyModelGenotypeLikelihoods,
                                 Stream.of(strandForward, strandReverse).flatMap(Collection::stream).collect(Collectors.toList()), // We filter out the HMM filtered reads as they do not apply to FRD
                                 FLAT_SNP_HET_PRIOR, api, maxEffectiveDepthAdjustment));
             }
@@ -186,20 +180,6 @@ public class DRAGENGenotypesModel implements GenotypingModel {
         }
     }
 
-
-    private GenotypeLikelihoodCalculatorDRAGEN getLikelihoodsCalculator(final int samplePloidy, final int alleleCount) {
-        if (samplePloidy >= cachePloidyCapacity || alleleCount >= cacheAlleleCountCapacity) {
-            return calculators.getInstanceDRAGEN(samplePloidy, alleleCount);
-        }
-        final GenotypeLikelihoodCalculatorDRAGEN cachedResult = likelihoodCalculators[samplePloidy][alleleCount];
-        if (cachedResult != null) {
-            return cachedResult;
-        } else {
-            final GenotypeLikelihoodCalculatorDRAGEN newOne = calculators.getInstanceDRAGEN(samplePloidy, alleleCount);
-            likelihoodCalculators[samplePloidy][alleleCount] = newOne;
-            return newOne;
-        }
-    }
 
     /**
      * This helper class is used to store the necessary data in order to sort a read based on its BQD "feather end" as

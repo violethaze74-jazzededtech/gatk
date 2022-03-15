@@ -31,18 +31,11 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
     // PhredScaled adjustment applied to the BQD score (this controls the weight of the base quality prior term in the BQD calculation)
     static final double PHRED_SCALED_ADJUSTMENT_FOR_BQ_SCORE = 2.5;
 
-    private final double cachedLog10ErrorRate;
-    private final double cachedLog10NonErrorRate;
+    private static final double CACHED_LOG_10_ERROR_RATE = Math.log10(BQD_FIXED_ERROR_RATE);
+    private static final double CACHED_LOG_10_NON_ERROR_RATE = Math.log10(1 - BQD_FIXED_ERROR_RATE);
 
-    /**
-     * Creates a new calculator providing its ploidy and number of genotyping alleles.
-     */
-    protected GenotypeLikelihoodCalculatorDRAGEN(final int ploidy, final int alleleCount) {
-        super(ploidy, alleleCount);
-        Utils.validateArg(ploidy > 0, () -> "ploidy must be at least 1 but was " + ploidy);
-        // The number of possible components is limited by distinct allele count and ploidy.
-        cachedLog10ErrorRate = Math.log10(BQD_FIXED_ERROR_RATE);
-        cachedLog10NonErrorRate = Math.log10(1 - BQD_FIXED_ERROR_RATE);
+    private GenotypeLikelihoodCalculatorDRAGEN() {
+        super();
     }
 
     /**
@@ -66,12 +59,13 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
      * @param offsetForRefIntoEvent offset of the variant into the reference event
      * @return An array corresponding to the likelihoods array score for BQD, with Double.NEGATIVE_INFINITY filling all mixed allele/indel allelse
      */
-    public <A extends Allele> double[] calculateBQDLikelihoods(final LikelihoodMatrix<GATKRead, A> sampleLikelihoods,
+    public static <A extends Allele> double[] calculateBQDLikelihoods(final int ploidy, final LikelihoodMatrix<GATKRead, A> sampleLikelihoods,
                                                                final List<DRAGENGenotypesModel.DragenReadContainer> strandForward,
                                                                final List<DRAGENGenotypesModel.DragenReadContainer> strandReverse,
                                                                final byte[] paddedReference,
                                                                final int offsetForRefIntoEvent) {
-        final double[] outputArray = new double[genotypeCount];
+        final int alleleCount = sampleLikelihoods.numberOfAlleles();
+        final double[] outputArray = new double[GenotypeIndexCalculator.genotypeCount(ploidy, alleleCount)];
         Arrays.fill(outputArray, Double.NEGATIVE_INFINITY);
 
         final Allele refAllele = sampleLikelihoods.getAllele(0);
@@ -118,7 +112,7 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
      * @param homopolymerAdjustment  Penalty to be applied to reads based on the homopolymer run (this should be precomputed for the ref site in quesiton)
      * @return phred scale likelihood for a BQD error mode for reads in the given direction according to the offsets requested
      */
-    private <A extends Allele> double computeBQDModelForStrandData(final LikelihoodMatrix<GATKRead, A> sampleLikelihoods,
+    private static <A extends Allele> double computeBQDModelForStrandData(final LikelihoodMatrix<GATKRead, A> sampleLikelihoods,
                                                                    final List<DRAGENGenotypesModel.DragenReadContainer> positionSortedReads,
                                                                    final double homopolymerAdjustment,
                                                                    final boolean forwards, final int homozygousAlleleIndex, final int errorAlleleIndex) {
@@ -158,8 +152,8 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
             // Populate the error probability array in phred space
             // Calculation: Alpha * P(r|E_allele) + (1 - Alpha) * P(r | G_homozygousGT))
             double phredContributionForRead = (homozygousGenotypeContribution==0 && errorAlleleContribution==0) ? 0 : -10 *
-                    MathUtils.approximateLog10SumLog10(errorAlleleContribution + cachedLog10ErrorRate,
-                                                       homozygousGenotypeContribution + cachedLog10NonErrorRate);
+                    MathUtils.approximateLog10SumLog10(errorAlleleContribution + CACHED_LOG_10_ERROR_RATE,
+                                                       homozygousGenotypeContribution + CACHED_LOG_10_NON_ERROR_RATE);
             cumulativeProbReadForErrorAllele[i] = cumulativeProbReadForErrorAllele[i-1] + phredContributionForRead;
 
             // Populate the cumulative genotype contribution array with the score for this read
@@ -224,10 +218,11 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
      * @param maxEffectiveDepthForHetAdjustment maxEffectiveDepthAdjustment used to reduce the effect of FRD at high depth sites (0 means no adjustment)
      * @return a likelihoods array corrsponding to the log10 likelihoods scores for the best combination of model parameters for each Genotype (Double.NEGATIVE_INFINITY for Genotypes not considered)
      */
-    public <A extends Allele> double[] calculateFRDLikelihoods(final LikelihoodMatrix<GATKRead, A> sampleLikelihoods, final double[] ploidyModelLikelihoods,
+    public static <A extends Allele> double[] calculateFRDLikelihoods(final int ploidy, final LikelihoodMatrix<GATKRead, A> sampleLikelihoods, final double[] ploidyModelLikelihoods,
                                                                final List<DRAGENGenotypesModel.DragenReadContainer> readContainers,
                                                                final double snipAprioriHet, final double indelAprioriHet, final int maxEffectiveDepthForHetAdjustment) {
-        final double[] outputArray = new double[genotypeCount];
+        final int alleleCount = sampleLikelihoods.numberOfAlleles();
+        final double[] outputArray = new double[GenotypeIndexCalculator.genotypeCount(ploidy, alleleCount)];
         Arrays.fill(outputArray, Double.NEGATIVE_INFINITY);
 
         final Allele refAllele = sampleLikelihoods.getAllele(0);
@@ -320,7 +315,7 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
      * @param criticalThresholdsSorted critical thresholds to use for this orientation combination
      * @return two doubles, index 0 is the frd score and the second is log p(F()) score used to adjust the score
      */
-    private <A extends Allele> double[] computeFRDModelForStrandData(final LikelihoodMatrix<GATKRead, A> sampleLikelihoods,
+    private static <A extends Allele> double[] computeFRDModelForStrandData(final LikelihoodMatrix<GATKRead, A> sampleLikelihoods,
                                                                      final int homozygousAlleleIndex, final int fAlleleIndex,
                                                                      final List<DRAGENGenotypesModel.DragenReadContainer> positionSortedReads,
                                                                      final Predicate<DRAGENGenotypesModel.DragenReadContainer> predicate,
@@ -413,7 +408,7 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
     // TODO  of not matching DRAGEN properly.
     // helper method to populate the reads containers properly with their critical values and store them in the provided set
     // NOTE: this has the side effect of setting the DragenReadContainer setPhredPFValue() values for the reads for the given set of alleles
-    private FRDCriticalThresholds computeCriticalValues(final List<DRAGENGenotypesModel.DragenReadContainer> container, final double log10MapqPriorAdjustment) {
+    private static FRDCriticalThresholds computeCriticalValues(final List<DRAGENGenotypesModel.DragenReadContainer> container, final double log10MapqPriorAdjustment) {
         final Set<Double> criticalThresholdsForwards = new HashSet<>();
         final Set<Double> criticalThresholdsReverse = new HashSet<>();
         final Set<Double> criticalThresholdsTotal = new HashSet<>();
@@ -438,7 +433,7 @@ public final class GenotypeLikelihoodCalculatorDRAGEN extends GenotypeLikelihood
     /**
      * Helper class for storing FRD sorted and de-duplicated critical thresholds generated from reads to be accessed by subsequent calls.
      */
-    private class FRDCriticalThresholds {
+    private static class FRDCriticalThresholds {
         private final List<Double> criticalThresholdsForwards;
         private final List<Double> criticalThresholdsReverse;
         private final List<Double> criticalThresholdsTotal;
