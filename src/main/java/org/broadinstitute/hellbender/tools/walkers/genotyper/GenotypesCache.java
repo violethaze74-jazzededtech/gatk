@@ -102,7 +102,7 @@ public final class GenotypesCache {
      * @return never {@code null}.
      */
     public synchronized GenotypeLikelihoodCalculator getInstance(final int ploidy, final int alleleCount) {
-        //ensureCapacity(alleleCount, ploidy);
+        ensureCapacity(alleleCount, ploidy);
         return new GenotypeLikelihoodCalculator(ploidy, alleleCount, caches);
     }
 

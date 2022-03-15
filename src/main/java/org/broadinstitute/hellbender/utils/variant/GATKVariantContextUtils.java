@@ -347,8 +347,7 @@ public final class GATKVariantContextUtils {
                 throw new GATKException("cannot uses posteriors without an genotype prior calculator present");
             } else {
                 // Calculate posteriors.
-                final GenotypeLikelihoodCalculator glCalc = GL_CALCS.getInstance(ploidy, allelesToUse.size());
-                final double[] log10Priors = gpc.getLog10Priors(glCalc, allelesToUse);
+                final double[] log10Priors = gpc.getLog10Priors(ploidy, allelesToUse);
                 final double[] log10Posteriors = MathUtils.ebeAdd(log10Priors, genotypeLikelihoods);
                 final double[] normalizedLog10Posteriors = MathUtils.scaleLogSpaceArrayForNumericalStability(log10Posteriors);
                 // Update GP and PG annotations:

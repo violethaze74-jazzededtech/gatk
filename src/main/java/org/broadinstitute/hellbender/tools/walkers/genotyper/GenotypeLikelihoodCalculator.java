@@ -3,15 +3,14 @@ package org.broadinstitute.hellbender.tools.walkers.genotyper;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.GenotypeLikelihoods;
 import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.math3.util.FastMath;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.math3.util.FastMath;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.genotyper.LikelihoodMatrix;
 
 import java.util.Arrays;
-import java.util.Iterator;
 
 /**
  * This class has just one fundamental responsibility: calculating genotype likelihoods through the formula:
@@ -38,7 +37,7 @@ import java.util.Iterator;
  * If the cache-friendliness of this class is broken, it will show up as a severe regression in the runtime of its unit tests
  * for larger ploidies and allele counts.
  */
-public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCounts> {
+public class GenotypeLikelihoodCalculator {
     /**
      * Genotype table for this calculator.
      *
@@ -53,11 +52,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
 
     final int ploidy;
 
-    /**
-     * Cache of the last genotype-allele-count requested
-     */
-    private GenotypeAlleleCounts lastOverheadCounts;
-
     public GenotypeLikelihoodCalculator(final int ploidy, final int alleleCount, final GenotypeAlleleCounts[][] genotypeTableByPloidy) {
         genotypeAlleleCounts = genotypeTableByPloidy[ploidy];
         genotypeCount = GenotypeIndexCalculator.genotypeCount(ploidy, alleleCount);
@@ -71,36 +65,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
      */
     public int genotypeCount()  {
         return genotypeCount;
-    }
-
-    /**
-     * Returns the genotype associated to a particular likelihood index.
-     *
-     * <p>If {@code index} is larger than {@link GenotypesCache#MAX_CACHE_SIZE_PER_PLOIDY},
-     *  this method will reconstruct that genotype-allele-count iteratively from the largest strongly referenced count available.
-     *  or the last requested index genotype.
-     *  </p>
-     *
-     * <p> Therefore if you are iterating through all genotype-allele-counts you should do sequentially and incrementally, to
-     * avoid a large efficiency drop </p>.
-     *
-     * @param index query likelihood-index.
-     * @return never {@code null}.
-     */
-    public GenotypeAlleleCounts genotypeAlleleCountsAt(final int index) {
-        Utils.validateArg(index >= 0 && index < genotypeCount, () -> "invalid likelihood index: " + index + " >= " + genotypeCount
-                    + " (genotype count for nalleles = " + alleleCount + " and ploidy " + ploidy);
-        if (index < GenotypesCache.MAX_CACHE_SIZE_PER_PLOIDY) {
-            return genotypeAlleleCounts[index];
-        } else if (lastOverheadCounts == null || lastOverheadCounts.index() > index) {
-            final GenotypeAlleleCounts result = genotypeAlleleCounts[GenotypesCache.MAX_CACHE_SIZE_PER_PLOIDY - 1].copy();
-            result.increase(index - GenotypesCache.MAX_CACHE_SIZE_PER_PLOIDY + 1);
-            lastOverheadCounts = result;
-            return result.copy();
-        } else {
-            lastOverheadCounts.increase(index - lastOverheadCounts.index());
-            return lastOverheadCounts.copy();
-        }
     }
 
     /**
@@ -142,19 +106,19 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
 
         final double[] result = new double[genotypeCount];
 
-        Utils.stream(iterator()).forEach(alleleCounts -> {
-            final int componentCount = alleleCounts.distinctAlleleCount();
-            final int genotypeIndex = alleleCounts.index();
+        for (final GenotypeAlleleCounts gac : GenotypeAlleleCounts.iterable(ploidy, alleleCount)) {
+            final int componentCount = gac.distinctAlleleCount();
+            final int genotypeIndex = gac.index();
             if (componentCount == 1) {
                 // homozygous case: log P(reads|AAAAA. . .) = sum_{reads} log P(read|A)
-                final int allele = alleleCounts.alleleIndexAt(0);
+                final int allele = gac.alleleIndexAt(0);
                 result[genotypeIndex] = MathUtils.sum(log10LikelihoodsByAlleleAndRead[allele]);
             } else if (componentCount == 2) {
                 // biallelic het case: log P(reads | nA copies of A, nB copies of B) = sum_{reads} (log[(nA * P(read | A) + nB * P(read | B))] -log(ploidy))
-                final double[] log10ReadLks1 = log10LikelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(0)];
-                final int count1 = alleleCounts.alleleCountAt(0);
+                final double[] log10ReadLks1 = log10LikelihoodsByAlleleAndRead[gac.alleleIndexAt(0)];
+                final int count1 = gac.alleleCountAt(0);
                 final double log10Count1 = MathUtils.log10(count1);
-                final double[] log10ReadLks2  = log10LikelihoodsByAlleleAndRead[alleleCounts.alleleIndexAt(1)];
+                final double[] log10ReadLks2  = log10LikelihoodsByAlleleAndRead[gac.alleleIndexAt(1)];
                 final double log10Count2 = MathUtils.log10(ploidy - count1);
 
                 // note: if you are reading the multiallelic case below and have gotten paranoid about cache efficiency,
@@ -167,10 +131,10 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
                 Arrays.fill(perReadBuffer,0, readCount, 0);
                 final double[][] rescaledNonLogLikelihoods = rescaledNonLogLikelihoodsAndCorrection.getLeft();
                 final double log10Rescaling = rescaledNonLogLikelihoodsAndCorrection.getRight();
-                alleleCounts.forEachAlleleIndexAndCount((a, f) -> new IndexRange(0, readCount).forEach(r -> perReadBuffer[r] += f * rescaledNonLogLikelihoods[a][r]));
+                gac.forEachAlleleIndexAndCount((a, f) -> new IndexRange(0, readCount).forEach(r -> perReadBuffer[r] += f * rescaledNonLogLikelihoods[a][r]));
                 result[genotypeIndex] = new IndexRange(0, readCount).sum(r -> FastMath.log10(perReadBuffer[r])) - readCount * MathUtils.log10(ploidy) + log10Rescaling;
             }
-        });
+        }
         return result;
     }
 
@@ -249,41 +213,10 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
                 () -> String.format("New allele count %d exceeds old allele count %d.", newAlleleCount, alleleCount));
                 ;
         final int[] result = new int[GenotypeIndexCalculator.genotypeCount(ploidy, newAlleleCount)];
-        for (final GenotypeAlleleCounts newGAC : glCalcs.getInstance(ploidy, newAlleleCount)) {
+        for (final GenotypeAlleleCounts newGAC : GenotypeAlleleCounts.iterable(ploidy, newAlleleCount)) {
             result[newGAC.index()] = GenotypeIndexCalculator.alleleCountsToIndex(newGAC, newToOldAlleleMap);
         }
 
         return result;
-    }
-
-    @Override
-    public Iterator<GenotypeAlleleCounts> iterator() {
-        return new Iterator<GenotypeAlleleCounts>() {
-            private int index = 0;
-            private GenotypeAlleleCounts alleleCounts = genotypeAlleleCounts[0];
-
-            @Override
-            public boolean hasNext() {
-                return index < genotypeCount;
-            }
-
-            @Override
-            public GenotypeAlleleCounts next() {
-                alleleCounts = index++ == 0 ? genotypeAlleleCounts[0] : nextGenotypeAlleleCounts(alleleCounts);
-                return alleleCounts;
-            }
-
-            // note that if the input has a high index that is not cached, it will be mutated in order to form the output
-            private GenotypeAlleleCounts nextGenotypeAlleleCounts(final GenotypeAlleleCounts alleleCounts) {
-                final int index = alleleCounts.index();
-                if (index < (GenotypesCache.MAX_CACHE_SIZE_PER_PLOIDY - 1)) {
-                    return genotypeAlleleCounts[index + 1];
-                } else if (index == GenotypesCache.MAX_CACHE_SIZE_PER_PLOIDY - 1) {
-                    return genotypeAlleleCounts[index].copy().increase();
-                } else {
-                    return alleleCounts.increase();
-                }
-            }
-        };
     }
 }
