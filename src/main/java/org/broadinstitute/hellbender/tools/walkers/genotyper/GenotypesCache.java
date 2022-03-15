@@ -1,8 +1,9 @@
 package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.utils.Utils;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * This class holds caches of {@link GenotypeAlleleCounts} for multiple fixed ploidy, allele count pairs,
@@ -15,32 +16,22 @@ import org.broadinstitute.hellbender.utils.Utils;
 public final class GenotypesCache {
 
     /**
-     * The current maximum ploidy supported by the tables.  Initial value may be anything positive.
+     * Maximum possible number of cached {@link GenotypeAlleleCounts} for each fixed ploidy
      */
-    private static int maximumPloidy = 2;
+    public static final int MAX_CACHE_SIZE = 5000;
 
     /**
-     * The current number of cached genotypes per ploidy
-     */
-    private static int cacheSizePerPloidy = 10;
-
-    /**
-     * Maximum possible number of cached {@link GenotypeAlleleCounts} for each fixed ploidy and allele count.
-     */
-    public static final int MAX_CACHE_SIZE_PER_PLOIDY = 1000;
-
-    /**
-     * Cache of GenotypeAlleleCounts objects by ploidy.  Format is table[p][n] = nth genotype of ploidy p in canonical order,
+     * Cache of GenotypeAlleleCounts objects by ploidy.  Format is caches[p][n] = nth genotype of ploidy p in canonical order,
      * with p up to the current maximum ploidy and n up to the maximum number of cached genotypes per table.
      */
-    private static GenotypeAlleleCounts[][] caches = createCaches(maximumPloidy, cacheSizePerPloidy);
+    private static List<List<GenotypeAlleleCounts>> caches = new ArrayList<>();
 
     private GenotypesCache(){ }
 
     /**
      * Returns the GenotypeAlleleCounts associated to a particular ploidy and genotype index.
      *
-     *  If the requested index is larger than {@link GenotypesCache#MAX_CACHE_SIZE_PER_PLOIDY},
+     *  If the requested index is larger than {@link GenotypesCache#MAX_CACHE_SIZE},
      *  this method will construct the result iteratively from the largest cached object.  Thus if you are iterating
      *  through all genotype-allele-counts you should do sequentially using the iterator method to avoid a large efficiency drop.
      *
@@ -52,49 +43,43 @@ public final class GenotypesCache {
         ensureCapacity(genotypeIndex, ploidy);
         Utils.validateArg(ploidy >= 0, "ploidy may not be negative");
         Utils.validateArg(genotypeIndex >= 0, "genotype index may not be negative");
-        if (genotypeIndex < cacheSizePerPloidy) {
-            return caches[ploidy][genotypeIndex];
+        final List<GenotypeAlleleCounts> cache = caches.get(ploidy);
+        if (genotypeIndex < cache.size()) {
+            return cache.get(genotypeIndex);
         } else {
-            final GenotypeAlleleCounts result = caches[ploidy][cacheSizePerPloidy - 1].copy();
-            result.increase(genotypeIndex + 1 - cacheSizePerPloidy);
+            final GenotypeAlleleCounts result = cache.get(cache.size() - 1).copy();
+            result.increase(genotypeIndex + 1 - cache.size());
             return result;
         }
     }
 
     /**
-     * Composes a table with the lists of all possible genotype allele counts given the the ploidy and maximum allele index.
+     * Extends the genotype allele counts cache for a certain ploidy up to a given size
      *
      * This method is synchronized since it modifies the shared cache.
      */
-    private static synchronized GenotypeAlleleCounts[][] createCaches(final int maximumPloidy, final int cachedGenotypesPerPloidy) {
-        Utils.validateArg(maximumPloidy >= 0, () -> "the ploidy provided cannot be negative: " + maximumPloidy);
-        Utils.validateArg(cachedGenotypesPerPloidy >= 0, () -> "the cache size provided cannot be negative: " + cachedGenotypesPerPloidy);
-        final GenotypeAlleleCounts[][] result = new GenotypeAlleleCounts[maximumPloidy + 1][];
+    private static synchronized void extendCache(final int ploidy, final int newSize) {
+        final List<GenotypeAlleleCounts> cache = caches.get(ploidy);
 
-        for (int ploidy = 0; ploidy <= maximumPloidy; ploidy++) {
-            final int numberOfCachedGenotypes = Math.min(cachedGenotypesPerPloidy, MAX_CACHE_SIZE_PER_PLOIDY);
-            final GenotypeAlleleCounts[] cache = new GenotypeAlleleCounts[numberOfCachedGenotypes];
-            cache[0] = GenotypeAlleleCounts.first(ploidy);
-            for (int genotypeIndex = 1; genotypeIndex < numberOfCachedGenotypes; genotypeIndex++) {
-                cache[genotypeIndex] = cache[genotypeIndex - 1].next();
-            }
-            result[ploidy] = cache;
+        while (cache.size() < newSize) {
+            cache.add(cache.get(cache.size() - 1).next());
         }
-
-        return result;
     }
 
     /**
      * Update cache if necessary
      */
-    private static void ensureCapacity(final int genotypeIndex, final int requestedMaximumPloidy) {
-        if ((genotypeIndex < cacheSizePerPloidy || cacheSizePerPloidy == MAX_CACHE_SIZE_PER_PLOIDY) && requestedMaximumPloidy <= maximumPloidy) {
-            return;
+    private static void ensureCapacity(final int genotypeIndex, final int ploidy) {
+        // add empty lists of genotypes until we have initialized all ploidies up to and including this one
+        while (ploidy > caches.size()) {
+            caches.add(new ArrayList<>());
         }
 
-        maximumPloidy = Math.max(maximumPloidy, requestedMaximumPloidy);
-        cacheSizePerPloidy = Math.min(Math.max(cacheSizePerPloidy, genotypeIndex + 1), MAX_CACHE_SIZE_PER_PLOIDY);
-        caches = createCaches(maximumPloidy, cacheSizePerPloidy);
-    }
+        final List<GenotypeAlleleCounts> cache = caches.get(ploidy);
 
+        if (cache.size() < genotypeIndex && cache.size() < MAX_CACHE_SIZE) {
+            final int newSize = Math.min(Math.max(cache.size() * 2, genotypeIndex), MAX_CACHE_SIZE);
+            extendCache(ploidy, newSize);
+        }
+    }
 }
