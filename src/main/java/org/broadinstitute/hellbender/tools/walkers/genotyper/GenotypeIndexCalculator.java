@@ -66,7 +66,7 @@ public class GenotypeIndexCalculator {
         final long result = indexOfFirstGenotypeWithAllele(ploidy, alleleCount);
         Utils.validateArg(result != MathUtils.LONG_OVERFLOW && result < Integer.MAX_VALUE, () ->
                 String.format("the number of genotypes is too large for ploidy %d and %d alleles: approx. %.0f", ploidy, alleleCount,
-                        Math.pow(10, MathUtils.log10BinomialCoefficient(ploidy + alleleCount - 1, alleleCount - 1))));
+                        CombinatoricsUtils.binomialCoefficientDouble(ploidy + alleleCount - 1, alleleCount - 1)));
         return (int) result;
     }
 

@@ -2,6 +2,7 @@ package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.Genotype;
+import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
@@ -315,8 +316,8 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
      */
     public double log10CombinationCount() {
         if (log10CombinationCount == UNCOMPUTED_LOG_10_COMBINATION_COUNT) {
-            log10CombinationCount = MathUtils.log10Factorial(ploidy)
-                    - new IndexRange(0, distinctAlleleCount).sum(n -> MathUtils.log10Factorial(sortedAlleleCounts[2*n+1]));
+            log10CombinationCount = MathUtils.logToLog10(CombinatoricsUtils.factorialLog(ploidy)
+                    - new IndexRange(0, distinctAlleleCount).sum(n -> CombinatoricsUtils.factorialLog(sortedAlleleCounts[2*n+1])));
         }
         return log10CombinationCount;
     }

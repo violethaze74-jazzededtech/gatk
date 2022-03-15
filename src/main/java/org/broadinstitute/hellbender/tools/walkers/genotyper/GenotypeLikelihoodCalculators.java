@@ -1,5 +1,7 @@
 package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
+import org.apache.commons.math3.util.CombinatoricsUtils;
+import org.apache.commons.math3.util.FastMath;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.exceptions.GATKException;
@@ -215,22 +217,22 @@ public final class GenotypeLikelihoodCalculators {
         if (ploidy == 1) {
             return maxGenotypeCount;
         }
-        final double log10MaxGenotypeCount = Math.log10(maxGenotypeCount);
+        final double logMaxGenotypeCount = FastMath.log(maxGenotypeCount);
 
         // Math explanation: genotype count is determined by ${P+A-1 \choose A-1}$, this leads to constraint
         // $\log(\frac{(P+A-1)!}{(A-1)!}) \le \log(P!G)$,
         // where $P$ is ploidy, $A$ is allele count, and $G$ is maxGenotypeCount
         // The upper and lower bounds of the left hand side of the constraint are $P \log(A-1+P)$ and $P \log(A)$
-        // which require $A$ to be searched in interval $[10^{\log(P!G)/P} - (P-1), 10^{\log(P!G)/P}]$
+        // which require $A$ to be searched in interval $[exp{\log(P!G)/P} - (P-1), exp{\log(P!G)/P}]$
         // Denote $[10^{\log(P!G)/P}$ as $x$ in the code.
 
-        final double x = Math.pow(10, (MathUtils.log10Factorial(ploidy) + log10MaxGenotypeCount)/ploidy );
+        final double x = FastMath.exp((CombinatoricsUtils.factorialLog(ploidy) + logMaxGenotypeCount)/ploidy );
         final int lower = (int)Math.floor(x) - ploidy - 1;
         final int upper = (int)Math.ceil(x);
         for(int a=upper; a>=lower; --a){// check one by one
 
-            final double log10GTCnt = MathUtils.log10BinomialCoefficient(ploidy+a-1, a-1);
-            if(log10MaxGenotypeCount >= log10GTCnt) {
+            final double logGTCnt = CombinatoricsUtils.binomialCoefficientLog(ploidy+a-1, a-1);
+            if(logMaxGenotypeCount >= logGTCnt) {
                 return a;
             }
         }

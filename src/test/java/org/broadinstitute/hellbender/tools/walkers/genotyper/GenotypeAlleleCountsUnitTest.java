@@ -2,6 +2,7 @@ package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
 import com.google.common.base.Strings;
 import htsjdk.variant.variantcontext.Allele;
+import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -174,7 +175,7 @@ public final class GenotypeAlleleCountsUnitTest {
                 if (next.distinctAlleleCount() == 1) {
                     assertEquals(next.log10CombinationCount(), 0.0);
                 } else if (next.distinctAlleleCount() == ploidy) {
-                    assertEquals(next.log10CombinationCount(), MathUtils.log10Factorial(ploidy));
+                    assertEquals(next.log10CombinationCount(), MathUtils.logToLog10(CombinatoricsUtils.factorialLog(ploidy)));
                 }
             }
 

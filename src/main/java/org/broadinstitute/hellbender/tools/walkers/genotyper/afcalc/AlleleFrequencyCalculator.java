@@ -6,6 +6,7 @@ import htsjdk.variant.variantcontext.VariantContext;
 import it.unimi.dsi.fastutil.doubles.DoubleArrayList;
 import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
 import org.apache.commons.math3.special.Gamma;
+import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.apache.commons.math3.util.MathArrays;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.*;
 import org.broadinstitute.hellbender.utils.*;
@@ -230,8 +231,8 @@ public final class AlleleFrequencyCalculator {
         final int ploidy = log10GenotypeLikelihoods.length - 1;
 
         final double[] log10UnnormalizedPosteriors = new IndexRange(0, ploidy + 1)
-                .mapToDouble(n -> log10GenotypeLikelihoods[n] + MathUtils.log10BinomialCoefficient(ploidy, n)
-                        + MathUtils.logToLog10(Gamma.logGamma(n + snpPseudocount ) + Gamma.logGamma(ploidy - n + refPseudocount)));
+                .mapToDouble(n -> log10GenotypeLikelihoods[n] + MathUtils.logToLog10(CombinatoricsUtils.binomialCoefficientLog(ploidy, n)
+                        + Gamma.logGamma(n + snpPseudocount ) + Gamma.logGamma(ploidy - n + refPseudocount)));
 
         return (returnZeroIfRefIsMax && MathUtils.maxElementIndex(log10UnnormalizedPosteriors) == 0) ? 0.0 :
                 1 - MathUtils.normalizeFromLog10ToLinearSpace(log10UnnormalizedPosteriors)[0];
