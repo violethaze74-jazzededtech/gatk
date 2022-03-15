@@ -108,4 +108,14 @@ public class GenotypeIndexCalculatorUnitTest {
         Assert.assertEquals(GenotypeIndexCalculator.alleleCountsToIndex(counts), index);
     }
 
+    @Test
+    public void testComputeMaxAcceptableAlleleCount(){
+        Assert.assertEquals(1024, GenotypeIndexCalculator.computeMaxAcceptableAlleleCount(1, 1024));
+        Assert.assertEquals(44, GenotypeIndexCalculator.computeMaxAcceptableAlleleCount(2, 1024));
+        Assert.assertEquals(17, GenotypeIndexCalculator.computeMaxAcceptableAlleleCount(3, 1024));
+        Assert.assertEquals(5, GenotypeIndexCalculator.computeMaxAcceptableAlleleCount(10, 1024));
+        Assert.assertEquals(3, GenotypeIndexCalculator.computeMaxAcceptableAlleleCount(20, 1024));
+        Assert.assertEquals(2, GenotypeIndexCalculator.computeMaxAcceptableAlleleCount(100, 1024));
+    }
+
 }
