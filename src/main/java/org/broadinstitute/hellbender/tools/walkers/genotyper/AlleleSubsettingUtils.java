@@ -4,14 +4,16 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Ints;
 import htsjdk.variant.variantcontext.*;
-import htsjdk.variant.vcf.*;
+import htsjdk.variant.vcf.VCFConstants;
+import htsjdk.variant.vcf.VCFFormatHeaderLine;
+import htsjdk.variant.vcf.VCFHeader;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.exceptions.UserException;
-import org.broadinstitute.hellbender.utils.genotyper.GenotypePriorCalculator;
 import org.broadinstitute.hellbender.tools.walkers.ReferenceConfidenceVariantContextMerger;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.broadinstitute.hellbender.utils.Utils;
 import org.broadinstitute.hellbender.utils.collections.Permutation;
+import org.broadinstitute.hellbender.utils.genotyper.GenotypePriorCalculator;
 import org.broadinstitute.hellbender.utils.genotyper.IndexedAlleleList;
 import org.broadinstitute.hellbender.utils.variant.GATKVCFConstants;
 import org.broadinstitute.hellbender.utils.variant.GATKVariantContextUtils;
@@ -32,9 +34,6 @@ public final class AlleleSubsettingUtils {
     private AlleleSubsettingUtils() {}  // prevent instantiation
     private static final int PL_INDEX_OF_HOM_REF = 0;
     public static final int NUM_OF_STRANDS = 2; // forward and reverse strands
-
-    private static final GenotypesCache GL_CALCS = new GenotypesCache();
-
 
     /**
      * Create the new GenotypesContext with the subsetted PLs and ADs

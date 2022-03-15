@@ -11,7 +11,6 @@ import org.broadinstitute.hellbender.tools.walkers.annotator.*;
 import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.*;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeAlleleCounts;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeCalculationArgumentCollection;
-import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeLikelihoodCalculator;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypesCache;
 import org.broadinstitute.hellbender.utils.GenotypeCounts;
 import org.broadinstitute.hellbender.utils.MathUtils;

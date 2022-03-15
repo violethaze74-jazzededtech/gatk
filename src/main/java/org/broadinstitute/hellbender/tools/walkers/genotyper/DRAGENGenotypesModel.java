@@ -37,10 +37,6 @@ public class DRAGENGenotypesModel implements GenotypingModel {
     public static final double FLAT_SNP_HET_PRIOR = 34.77;
     public static final double BQD_HOMOPOLYMER_PHRED_ADJUSTMENT_FACTOR = 5.0;
 
-    private final int cacheAlleleCountCapacity;
-    private final int cachePloidyCapacity;
-    private GenotypeLikelihoodCalculatorDRAGEN[][] likelihoodCalculators;
-    private final GenotypesCache calculators;
     private final boolean computeBQD;
     private final boolean computeFRD;
     private final int allelePadding;
@@ -58,10 +54,6 @@ public class DRAGENGenotypesModel implements GenotypingModel {
     public DRAGENGenotypesModel(final int calculatorCachePloidyCapacity, final int calculatorCacheAlleleCapacity,
                                 final boolean useBQDModel, final boolean useFRDModel, final int allelePadding,
                                 final int maxEffectiveDepthAdjustment, final DragstrParams dragstrParams) {
-        cachePloidyCapacity = calculatorCachePloidyCapacity;
-        cacheAlleleCountCapacity = calculatorCacheAlleleCapacity;
-        likelihoodCalculators = new GenotypeLikelihoodCalculatorDRAGEN[calculatorCachePloidyCapacity][calculatorCacheAlleleCapacity];
-        calculators = new GenotypesCache();
         this.computeBQD = useBQDModel;
         this.computeFRD = useFRDModel;
         this.allelePadding = allelePadding;

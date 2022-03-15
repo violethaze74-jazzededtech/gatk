@@ -18,7 +18,10 @@ import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.exceptions.GATKException;
 import org.broadinstitute.hellbender.tools.walkers.annotator.AnnotationUtils;
 import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.StrandBiasUtils;
-import org.broadinstitute.hellbender.tools.walkers.genotyper.*;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.AlleleSubsettingUtils;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeAlleleCounts;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeAssignmentMethod;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypesCache;
 import org.broadinstitute.hellbender.utils.*;
 import org.broadinstitute.hellbender.utils.genotyper.GenotypePriorCalculator;
 import org.broadinstitute.hellbender.utils.param.ParamUtils;
@@ -42,8 +45,6 @@ public final class GATKVariantContextUtils {
     public static final String MERGE_INTERSECTION = "Intersection";
 
     public static final int DEFAULT_PLOIDY = HomoSapiensConstants.DEFAULT_PLOIDY;
-
-    private static final GenotypesCache GL_CALCS = new GenotypesCache();
 
     public static final double SUM_GL_THRESH_NOCALL = -0.1; // if sum(gl) is bigger than this threshold, we treat GL's as non-informative and will force a no-call.
 

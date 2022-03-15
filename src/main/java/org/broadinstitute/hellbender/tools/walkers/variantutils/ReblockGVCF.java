@@ -111,8 +111,6 @@ public final class ReblockGVCF extends MultiVariantWalker {
     public static final String QUAL_APPROX_SHORT_NAME = "do-qual-approx";
     public static final String ALLOW_MISSING_LONG_NAME = "allow-missing-hom-ref-data";
 
-    private static final GenotypesCache GL_CALCS = new GenotypesCache();
-
     @Argument(fullName = StandardArgumentDefinitions.OUTPUT_LONG_NAME, shortName = StandardArgumentDefinitions.OUTPUT_SHORT_NAME,
             doc="File to which variants should be written")
     protected GATKPath outputFile;

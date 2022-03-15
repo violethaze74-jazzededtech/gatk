@@ -37,9 +37,7 @@ public final class GenotypesCache {
      */
     private static GenotypeAlleleCounts[][] caches = createCaches(maximumPloidy, cacheSizePerPloidy);
 
-    public GenotypesCache(){
-
-    }
+    private GenotypesCache(){ }
 
     /**
      * Returns the GenotypeAlleleCounts associated to a particular ploidy and genotype index.

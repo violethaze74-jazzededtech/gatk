@@ -8,7 +8,9 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
 import org.apache.commons.math3.special.Gamma;
 import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.apache.commons.math3.util.MathArrays;
-import org.broadinstitute.hellbender.tools.walkers.genotyper.*;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeAlleleCounts;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeCalculationArgumentCollection;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeIndexCalculator;
 import org.broadinstitute.hellbender.utils.*;
 import org.broadinstitute.hellbender.utils.dragstr.DragstrParams;
 
@@ -22,8 +24,6 @@ import java.util.stream.IntStream;
  * @author David Benjamin &lt;davidben@broadinstitute.org&gt;
  */
 public final class AlleleFrequencyCalculator {
-
-    private static final GenotypesCache GL_CALCS = new GenotypesCache();
     private static final double THRESHOLD_FOR_ALLELE_COUNT_CONVERGENCE = 0.1;
     private static final int HOM_REF_GENOTYPE_INDEX = 0;
 

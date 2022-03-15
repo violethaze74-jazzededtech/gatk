@@ -211,8 +211,6 @@ public abstract class GenotypingEngine<Config extends StandardCallerArgumentColl
         return extractPNoAlt(alleles, gt, gpArray);
     }
 
-    private static final GenotypesCache GL_CALCS = new GenotypesCache();
-
     private double extractPNoAlt(final List<Allele> alleles, final Genotype gt, final double[] posteriors) {
         if (!alleles.contains(Allele.SPAN_DEL)) {
             return posteriors[0] - Math.max(0, QualityUtils.phredSum(posteriors));
