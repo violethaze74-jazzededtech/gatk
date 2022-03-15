@@ -124,4 +124,25 @@ public class GenotypeIndexCalculatorUnitTest {
         Assert.assertEquals(2, GenotypeIndexCalculator.computeMaxAcceptableAlleleCount(100, 1024));
     }
 
+    // ploidy, new to old allele reordering, expected result
+    @DataProvider(name = "newToOldMapData")
+    public Object[][] newToOldMapData() {
+        return new Object[][] {
+                {1, new int[] {0}, new int[] {0}},
+                {1, new int[] {1}, new int[] {1}},
+                {2, new int[] {0}, new int[] {0}},
+                {2, new int[] {1}, new int[] {2}},
+                {2, new int[] {2}, new int[] {5}},
+                {2, new int[] {0,1}, new int[] {0,1,2}},
+                {2, new int[] {1,0}, new int[] {2,1,0}},
+                {2, new int[] {0,2}, new int[] {0,3,5}}
+        };
+    }
+
+    @Test(dataProvider = "newToOldMapData")
+    public void testNewToOldIndexMap(final int ploidy, final int[] newToOldAlleleMap, final int[] expected) {
+        final int[] result = GenotypeIndexCalculator.newToOldGenotypeMap(ploidy, newToOldAlleleMap);
+        Assert.assertEquals(result, expected);
+    }
+
 }
