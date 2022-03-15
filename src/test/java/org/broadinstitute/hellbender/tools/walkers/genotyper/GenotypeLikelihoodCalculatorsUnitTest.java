@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
+import org.apache.commons.math3.exception.MathArithmeticException;
 import org.broadinstitute.hellbender.GATKBaseTest;
 import org.testng.Assert;
 import org.testng.annotations.BeforeClass;
@@ -75,7 +76,7 @@ public final class GenotypeLikelihoodCalculatorsUnitTest extends GATKBaseTest {
         }
     }
 
-    @Test(expectedExceptions = IllegalArgumentException.class)
+    @Test(expectedExceptions = MathArithmeticException.class)
     public void testGenotypeCountOverflow() throws Exception {
         final int genotypeCount = GenotypeIndexCalculator.genotypeCount(10_000, 10_000);
     }
