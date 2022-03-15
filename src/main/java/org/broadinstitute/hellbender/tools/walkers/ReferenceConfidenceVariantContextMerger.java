@@ -13,7 +13,7 @@ import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.Alle
 import org.broadinstitute.hellbender.tools.walkers.annotator.allelespecific.ReducibleAnnotationData;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.AlleleSubsettingUtils;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeAssignmentMethod;
-import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeLikelihoodCalculators;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypesCache;
 import org.broadinstitute.hellbender.tools.walkers.mutect.filtering.Mutect2FilteringEngine;
 import org.broadinstitute.hellbender.utils.GenotypeUtils;
 import org.broadinstitute.hellbender.utils.Utils;
@@ -34,7 +34,7 @@ import java.util.stream.Stream;
 @SuppressWarnings({"rawtypes","unchecked"}) //TODO fix uses of untyped Comparable.
 public final class ReferenceConfidenceVariantContextMerger {
 
-    private static final GenotypeLikelihoodCalculators calculators = new GenotypeLikelihoodCalculators();
+    private static final GenotypesCache calculators = new GenotypesCache();
     private static VCFHeader vcfInputHeader = null;
     protected final VariantAnnotatorEngine annotatorEngine;
     private final boolean doSomaticMerge;

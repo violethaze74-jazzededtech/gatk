@@ -12,35 +12,57 @@ import org.broadinstitute.hellbender.utils.Utils;
  *
  * This class is thread-safe since modifying the caches is synchronized.
  */
-public final class GenotypeLikelihoodCalculators {
+public final class GenotypesCache {
 
-    private static final Logger logger = LogManager.getLogger(GenotypeLikelihoodCalculators.class);
+    private static final Logger logger = LogManager.getLogger(GenotypesCache.class);
 
     /**
      * The current maximum ploidy supported by the tables.  Initial value may be anything positive.
      */
-    private int maximumPloidy = 2;
+    private static int maximumPloidy = 2;
+
+    /**
+     * The current number of cached genotypes per ploidy
+     */
+    private static int cacheSizePerPloidy = 100;
 
     /**
      * Maximum possible number of cached {@link GenotypeAlleleCounts} for each fixed ploidy and allele count.
      */
-    public static final int MAXIMUM_CACHED_GENOTYPES_PER_CALCULATOR = 1000;
-    
-
-    /**
-     * The current maximum allele index supported by the tables.
-     */
-    private int maximumAllele = 1;
-
+    public static final int MAX_CACHE_SIZE_PER_PLOIDY = 1000;
 
     /**
      * Cache of GenotypeAlleleCounts objects by ploidy.  Format is table[p][n] = nth genotype of ploidy p in canonical order,
-     * with p up to the current maximmum ploidy and n up to the maximum number of cached genotypes per table.
+     * with p up to the current maximum ploidy and n up to the maximum number of cached genotypes per table.
      */
-    private GenotypeAlleleCounts[][] genotypeTableByPloidy = createCaches(maximumPloidy,maximumAllele);
+    private static GenotypeAlleleCounts[][] caches = createCaches(maximumPloidy, cacheSizePerPloidy);
 
-    public GenotypeLikelihoodCalculators(){
+    public GenotypesCache(){
 
+    }
+
+    /**
+     * Returns the GenotypeAlleleCounts associated to a particular ploidy and genotype index.
+     *
+     *  If the requested index is larger than {@link GenotypesCache#MAX_CACHE_SIZE_PER_PLOIDY},
+     *  this method will construct the result iteratively from the largest cached object.  Thus if you are iterating
+     *  through all genotype-allele-counts you should do sequentially using the iterator method to avoid a large efficiency drop.
+     *
+     * @param ploidy the ploidy
+     * @param genotypeIndex  the genotype index in the canonical order
+     * @return never {@code null}.
+     */
+    public static GenotypeAlleleCounts get(final int ploidy, final int genotypeIndex) {
+        ensureCapacity(genotypeIndex, ploidy);
+        Utils.validateArg(ploidy >= 0, "ploidy may not be negative");
+        Utils.validateArg(genotypeIndex >= 0, "genotype index may not be negative");
+        if (genotypeIndex < cacheSizePerPloidy) {
+            return caches[ploidy][genotypeIndex];
+        } else {
+            final GenotypeAlleleCounts result = caches[ploidy][cacheSizePerPloidy - 1].copy();
+            result.increase(genotypeIndex + 1 - cacheSizePerPloidy);
+            return result;
+        }
     }
 
     /**
@@ -48,13 +70,13 @@ public final class GenotypeLikelihoodCalculators {
      *
      * This method is synchronized since it modifies the shared cache.
      */
-    private static synchronized GenotypeAlleleCounts[][] createCaches(final int maximumPloidy, final int maximumAllele) {
+    private static synchronized GenotypeAlleleCounts[][] createCaches(final int maximumPloidy, final int cachedGenotypesPerPloidy) {
         Utils.validateArg(maximumPloidy >= 0, () -> "the ploidy provided cannot be negative: " + maximumPloidy);
-        Utils.validateArg(maximumAllele >= 0, () -> "the maximum allele index provided cannot be negative: " + maximumAllele);
-        final GenotypeAlleleCounts[][] result = new GenotypeAlleleCounts[maximumPloidy + 1][]; // each row has a different number of columns.
+        Utils.validateArg(cachedGenotypesPerPloidy >= 0, () -> "the cache size provided cannot be negative: " + cachedGenotypesPerPloidy);
+        final GenotypeAlleleCounts[][] result = new GenotypeAlleleCounts[maximumPloidy + 1][];
 
         for (int ploidy = 0; ploidy <= maximumPloidy; ploidy++) {
-            final int numberOfCachedGenotypes = Math.min(GenotypeIndexCalculator.genotypeCount(ploidy, maximumAllele), MAXIMUM_CACHED_GENOTYPES_PER_CALCULATOR);
+            final int numberOfCachedGenotypes = Math.min(cachedGenotypesPerPloidy, MAX_CACHE_SIZE_PER_PLOIDY);
             final GenotypeAlleleCounts[] cache = new GenotypeAlleleCounts[numberOfCachedGenotypes];
             cache[0] = GenotypeAlleleCounts.first(ploidy);
             for (int genotypeIndex = 1; genotypeIndex < numberOfCachedGenotypes; genotypeIndex++) {
@@ -78,8 +100,8 @@ public final class GenotypeLikelihoodCalculators {
      * @return never {@code null}.
      */
     public synchronized GenotypeLikelihoodCalculator getInstance(final int ploidy, final int alleleCount) {
-        ensureCapacity(alleleCount, ploidy);
-        return new GenotypeLikelihoodCalculator(ploidy, alleleCount, genotypeTableByPloidy);
+        //ensureCapacity(alleleCount, ploidy);
+        return new GenotypeLikelihoodCalculator(ploidy, alleleCount, caches);
     }
 
     /**
@@ -94,23 +116,22 @@ public final class GenotypeLikelihoodCalculators {
      */
     public synchronized GenotypeLikelihoodCalculatorDRAGEN getInstanceDRAGEN(final int ploidy, final int alleleCount) {
         Utils.validate(ploidy == 2, "DRAGEN genotyping mode currently only supports diploid samples");
-        ensureCapacity(alleleCount, ploidy);
-        return new GenotypeLikelihoodCalculatorDRAGEN(ploidy, alleleCount, genotypeTableByPloidy);
+        //ensureCapacity(alleleCount, ploidy);
+        return new GenotypeLikelihoodCalculatorDRAGEN(ploidy, alleleCount, caches);
     }
 
 
     /**
      * Update cache if necessary
      */
-    private void ensureCapacity(final int requestedMaximumAllele, final int requestedMaximumPloidy) {
-        if (requestedMaximumAllele <= maximumAllele && requestedMaximumPloidy <= maximumPloidy) {
+    private static void ensureCapacity(final int genotypeIndex, final int requestedMaximumPloidy) {
+        if ((genotypeIndex < cacheSizePerPloidy || cacheSizePerPloidy == MAX_CACHE_SIZE_PER_PLOIDY) && requestedMaximumPloidy <= maximumPloidy) {
             return;
         }
 
         maximumPloidy = Math.max(maximumPloidy, requestedMaximumPloidy);
-        maximumAllele = Math.max(maximumAllele, requestedMaximumAllele);
-        logger.debug("Expanding capacity ploidy:" + maximumPloidy + "->" + maximumPloidy + " allele:" +  maximumAllele +"->" + maximumAllele );
-        genotypeTableByPloidy = createCaches(maximumPloidy, maximumAllele);
+        cacheSizePerPloidy = Math.min(Math.max(cacheSizePerPloidy, genotypeIndex + 1), MAX_CACHE_SIZE_PER_PLOIDY);
+        caches = createCaches(maximumPloidy, cacheSizePerPloidy);
     }
 
 }

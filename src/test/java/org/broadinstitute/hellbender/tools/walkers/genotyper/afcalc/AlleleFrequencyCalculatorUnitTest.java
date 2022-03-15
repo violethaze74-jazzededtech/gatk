@@ -6,7 +6,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.math3.util.MathArrays;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeIndexCalculator;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeLikelihoodCalculator;
-import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeLikelihoodCalculators;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypesCache;
 import org.broadinstitute.hellbender.GATKBaseTest;
 import org.broadinstitute.hellbender.utils.MathUtils;
 import org.testng.Assert;
@@ -21,7 +21,7 @@ import java.util.stream.IntStream;
  */
 public class AlleleFrequencyCalculatorUnitTest extends GATKBaseTest {
     private static final double EPS = 1.0e-3;
-    private static final GenotypeLikelihoodCalculators GL_CALCS = new GenotypeLikelihoodCalculators();
+    private static final GenotypesCache GL_CALCS = new GenotypesCache();
 
     private static final Allele A = Allele.create("A", true);
     private static final Allele B = Allele.create("C");

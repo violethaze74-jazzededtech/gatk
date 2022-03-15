@@ -3,11 +3,11 @@ package org.broadinstitute.hellbender.utils;
 import htsjdk.variant.variantcontext.*;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeAlleleCounts;
 import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeIndexCalculator;
-import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypeLikelihoodCalculators;
+import org.broadinstitute.hellbender.tools.walkers.genotyper.GenotypesCache;
 import picard.util.MathUtil;
 
 public final class GenotypeUtils {
-    private static final GenotypeLikelihoodCalculators GL_CALCS = new GenotypeLikelihoodCalculators();
+    private static final GenotypesCache GL_CALCS = new GenotypesCache();
     final static int TYPICAL_BASE_QUALITY = 30;
     //from the genotype likelihoods equations assuming the SNP ref conf model with no mismatches
     //PL[2] = GQ; scaleFactor = PL[3]/GQ ~ -10 * DP * log10(P_error) / (-10 * DP * log10(1/ploidy)) where BASE_QUALITY = -10 * log10(P_error)

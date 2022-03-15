@@ -23,7 +23,7 @@ import java.util.stream.IntStream;
  */
 public final class AlleleFrequencyCalculator {
 
-    private static final GenotypeLikelihoodCalculators GL_CALCS = new GenotypeLikelihoodCalculators();
+    private static final GenotypesCache GL_CALCS = new GenotypesCache();
     private static final double THRESHOLD_FOR_ALLELE_COUNT_CONVERGENCE = 0.1;
     private static final int HOM_REF_GENOTYPE_INDEX = 0;
 
@@ -86,6 +86,8 @@ public final class AlleleFrequencyCalculator {
         } else {
             throw new IllegalStateException("Genotype " + g + " does not contain likelihoods necessary to calculate posteriors.");
         }
+
+        // TODO: replace this with GEnotypesCache::iterator
         final double[] log10Posteriors = new IndexRange(0, glCalc.genotypeCount()).mapToDouble(genotypeIndex -> {
             final GenotypeAlleleCounts gac = glCalc.genotypeAlleleCountsAt(genotypeIndex);
             return gac.log10CombinationCount() + log10Likelihoods[genotypeIndex]
@@ -185,6 +187,7 @@ public final class AlleleFrequencyCalculator {
             // for each allele, we collect the log10 probabilities of genotypes in which the allele is absent, then add (in log space)
             // to get the log10 probability that the allele is absent in this sample
             log10AbsentPosteriors.forEach(DoubleArrayList::clear);  // clear the buffers.  Note that this is O(1) due to the primitive backing array
+            // TODO: replace with GenotypesCache::iterator
             for (int genotype = 0; genotype < glCalc.genotypeCount(); genotype++) {
                 final double log10GenotypePosterior = log10GenotypePosteriors[genotype];
                 glCalc.genotypeAlleleCountsAt(genotype).forEachAbsentAlleleIndex(a -> log10AbsentPosteriors.get(a).add(log10GenotypePosterior), numAlleles);
@@ -255,6 +258,7 @@ public final class AlleleFrequencyCalculator {
 
             final double[] log10GenotypePosteriors = log10NormalizedGenotypePosteriors(g, glCalc, log10AlleleFrequencies);
 
+            // TODO: replace with GenotypesCache::iterator
             new IndexRange(0, glCalc.genotypeCount()).forEach(genotypeIndex ->
                 glCalc.genotypeAlleleCountsAt(genotypeIndex).forEachAlleleIndexAndCount((alleleIndex, count) ->
                         log10Result[alleleIndex] = MathUtils.log10SumLog10(log10Result[alleleIndex], log10GenotypePosteriors[genotypeIndex] + MathUtils.log10(count))));

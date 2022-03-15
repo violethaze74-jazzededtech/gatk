@@ -15,7 +15,7 @@ import org.testng.annotations.Test;
 import java.util.*;
 
 /**
- * Tests {@link GenotypeLikelihoodCalculators}.
+ * Tests {@link GenotypesCache}.
  *
  * @author Valentin Ruano-Rubio &lt;valentin@broadinstitute.org&gt;
  */
@@ -23,7 +23,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
 
     @Test(dataProvider = "ploidyAndMaximumAlleleData")
     public void testPloidyAndMaximumAllele(final int ploidy, final int alleleCount) {
-        final GenotypeLikelihoodCalculator calculator = new GenotypeLikelihoodCalculators().getInstance(ploidy, alleleCount);
+        final GenotypeLikelihoodCalculator calculator = new GenotypesCache().getInstance(ploidy, alleleCount);
         Assert.assertNotNull(calculator);
         Assert.assertEquals(calculator.ploidy(), ploidy);
         Assert.assertEquals(calculator.alleleCount(), alleleCount);
@@ -46,7 +46,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
     @Test(dataProvider = "ploidyAndMaximumAlleleAndReadCountsData", dependsOnMethods = "testPloidyAndMaximumAllele")
     public void testLikelihoodCalculation(final int ploidy, final int alleleCount, final int[] readCount) {
         final AlleleLikelihoods<GATKRead, Allele> readLikelihoods = ReadLikelihoodsUnitTester.readLikelihoods(alleleCount, readCount);
-        final GenotypeLikelihoodCalculator calculator = new GenotypeLikelihoodCalculators().getInstance(ploidy, alleleCount);
+        final GenotypeLikelihoodCalculator calculator = new GenotypesCache().getInstance(ploidy, alleleCount);
         final int genotypeCount = calculator.genotypeCount();
         final int testGenotypeCount = Math.min(30000, genotypeCount);
         final int sampleCount = readCount.length;
@@ -87,7 +87,7 @@ public final class GenotypeLikelihoodCalculatorUnitTest {
             if (reverseMap.get(alleleMap[i]) == null) reverseMap.put(alleleMap[i],new LinkedHashSet<>(6));
             reverseMap.get(alleleMap[i]).add(i);
         }
-        final GenotypeLikelihoodCalculators calculators = new GenotypeLikelihoodCalculators();
+        final GenotypesCache calculators = new GenotypesCache();
         final GenotypeLikelihoodCalculator calculator = calculators.getInstance(ploidy, maxAlleleCount);
 
         final int[] genotypeIndexMap = calculator.newToOldGenotypeMap(alleleMap, calculators);

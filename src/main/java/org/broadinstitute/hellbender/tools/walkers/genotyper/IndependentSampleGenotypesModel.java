@@ -23,7 +23,7 @@ public final class IndependentSampleGenotypesModel implements GenotypingModel {
     private final int cacheAlleleCountCapacity;
     private final int cachePloidyCapacity;
     private GenotypeLikelihoodCalculator[][] likelihoodCalculators;
-    private final GenotypeLikelihoodCalculators calculators;
+    private final GenotypesCache calculators;
 
     public IndependentSampleGenotypesModel() { this(DEFAULT_CACHE_PLOIDY_CAPACITY, DEFAULT_CACHE_ALLELE_CAPACITY); }
 
@@ -34,7 +34,7 @@ public final class IndependentSampleGenotypesModel implements GenotypingModel {
         cachePloidyCapacity = calculatorCachePloidyCapacity;
         cacheAlleleCountCapacity = calculatorCacheAlleleCapacity;
         likelihoodCalculators = new GenotypeLikelihoodCalculator[calculatorCachePloidyCapacity][calculatorCacheAlleleCapacity];
-        calculators = new GenotypeLikelihoodCalculators();
+        calculators = new GenotypesCache();
     }
 
     public <A extends Allele> GenotypingLikelihoods<A> calculateLikelihoods(final AlleleList<A> genotypingAlleles, final GenotypingData<A> data, final byte[] paddedReference, final int offsetForRefIntoEvent, final DragstrReferenceAnalyzer dragstrs) {

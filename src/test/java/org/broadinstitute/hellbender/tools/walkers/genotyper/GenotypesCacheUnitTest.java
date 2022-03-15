@@ -11,13 +11,13 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-public final class GenotypeLikelihoodCalculatorsUnitTest extends GATKBaseTest {
+public final class GenotypesCacheUnitTest extends GATKBaseTest {
 
-    GenotypeLikelihoodCalculators calcs;
+    GenotypesCache calcs;
 
     @BeforeClass
     public void init(){
-        calcs = new GenotypeLikelihoodCalculators();
+        calcs = new GenotypesCache();
     }
 
 
@@ -69,7 +69,7 @@ public final class GenotypeLikelihoodCalculatorsUnitTest extends GATKBaseTest {
     @Test(dataProvider = "genotypeCount")
     public void testInstanceNewInstance(int ploidy, int alleleCount, int expected) throws Exception {
         if (ploidy > 0) {
-            final GenotypeLikelihoodCalculator inst = new GenotypeLikelihoodCalculators().getInstance(ploidy, alleleCount);
+            final GenotypeLikelihoodCalculator inst = new GenotypesCache().getInstance(ploidy, alleleCount);
             Assert.assertEquals(inst.genotypeCount(), expected);
             Assert.assertEquals(inst.ploidy(), ploidy);
             Assert.assertEquals(inst.alleleCount(), alleleCount);

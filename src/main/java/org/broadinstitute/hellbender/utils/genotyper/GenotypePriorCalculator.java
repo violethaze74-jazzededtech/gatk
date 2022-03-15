@@ -152,6 +152,7 @@ public final class GenotypePriorCalculator {
         final int numberOfGenotypes = lkCalculator.genotypeCount();
         final double[] result = new double[numberOfGenotypes];
         // implied = result[0] = 0.0;
+        // TODO: replace with GenotypesCache::iterator
         for (int g = 1; g < numberOfGenotypes; g++) {
             final GenotypeAlleleCounts gac = lkCalculator.genotypeAlleleCountsAt(g);
             result[g] = gac.sumOverAlleleIndicesAndCounts((idx, cnt) -> cnt == 2

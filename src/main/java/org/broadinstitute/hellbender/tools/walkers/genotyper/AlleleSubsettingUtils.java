@@ -33,7 +33,7 @@ public final class AlleleSubsettingUtils {
     private static final int PL_INDEX_OF_HOM_REF = 0;
     public static final int NUM_OF_STRANDS = 2; // forward and reverse strands
 
-    private static final GenotypeLikelihoodCalculators GL_CALCS = new GenotypeLikelihoodCalculators();
+    private static final GenotypesCache GL_CALCS = new GenotypesCache();
 
 
     /**
@@ -354,8 +354,7 @@ public final class AlleleSubsettingUtils {
             final double GLDiffBetweenRefAndBestVariantGenotype = Math.abs(glsVector[indexOfMostLikelyVariantGenotype] - glsVector[PL_INDEX_OF_HOM_REF]);
             final int ploidy = genotype.getPloidy() > 0 ? genotype.getPloidy() : defaultPloidy;
 
-            final GenotypeAlleleCounts mostLikelyGenotypeAlleleCounts = new GenotypeLikelihoodCalculators()
-                    .getInstance(ploidy, vc.getNAlleles()).genotypeAlleleCountsAt(indexOfMostLikelyVariantGenotype);
+            final GenotypeAlleleCounts mostLikelyGenotypeAlleleCounts = GenotypesCache.get(ploidy, indexOfMostLikelyVariantGenotype);
 
             for (int allele = 1; allele < vc.getNAlleles(); allele++) {
                 if (mostLikelyGenotypeAlleleCounts.containsAllele(allele)) {
@@ -383,6 +382,8 @@ public final class AlleleSubsettingUtils {
         final Permutation<Allele> allelePermutation = new IndexedAlleleList<>(originalAlleles).permutation(new IndexedAlleleList<>(newAlleles));
 
         final GenotypeLikelihoodCalculator glCalc = GL_CALCS.getInstance(ploidy, originalAlleles.size());
+
+        // TODO: replace this with GenotypesCache::iterator
         for (int oldPLIndex = 0; oldPLIndex < glCalc.genotypeCount(); oldPLIndex++) {
             final GenotypeAlleleCounts oldAlleleCounts = glCalc.genotypeAlleleCountsAt(oldPLIndex);
 

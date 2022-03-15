@@ -40,7 +40,7 @@ public class DRAGENGenotypesModel implements GenotypingModel {
     private final int cacheAlleleCountCapacity;
     private final int cachePloidyCapacity;
     private GenotypeLikelihoodCalculatorDRAGEN[][] likelihoodCalculators;
-    private final GenotypeLikelihoodCalculators calculators;
+    private final GenotypesCache calculators;
     private final boolean computeBQD;
     private final boolean computeFRD;
     private final int allelePadding;
@@ -61,7 +61,7 @@ public class DRAGENGenotypesModel implements GenotypingModel {
         cachePloidyCapacity = calculatorCachePloidyCapacity;
         cacheAlleleCountCapacity = calculatorCacheAlleleCapacity;
         likelihoodCalculators = new GenotypeLikelihoodCalculatorDRAGEN[calculatorCachePloidyCapacity][calculatorCacheAlleleCapacity];
-        calculators = new GenotypeLikelihoodCalculators();
+        calculators = new GenotypesCache();
         this.computeBQD = useBQDModel;
         this.computeFRD = useFRDModel;
         this.allelePadding = allelePadding;
