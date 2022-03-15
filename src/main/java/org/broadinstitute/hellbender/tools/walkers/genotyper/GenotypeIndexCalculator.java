@@ -182,4 +182,25 @@ public class GenotypeIndexCalculator {
         }
         throw new GATKException("Code should never reach here.");
     }
+
+    /**
+     * Composes a genotype index map given a allele index recoding such that result[i] is the index of the old
+     * genotype corresponding to the ith new genotype.
+     *
+     * @param newToOldAlleleMap allele recoding such that newToOldAlleleMap[i] is the index of the old allele
+     *                               corresponding to the ith new allele
+     *
+     * @return never {@code null}.
+     */
+    public static int[] newToOldGenotypeMap(final int ploidy, final int[] newToOldAlleleMap) {
+        Utils.nonNull(newToOldAlleleMap);
+        final int newAlleleCount = newToOldAlleleMap.length;
+
+        final int[] result = new int[genotypeCount(ploidy, newAlleleCount)];
+        for (final GenotypeAlleleCounts newGAC : GenotypeAlleleCounts.iterable(ploidy, newAlleleCount)) {
+            result[newGAC.index()] = alleleCountsToIndex(newGAC, newToOldAlleleMap);
+        }
+
+        return result;
+    }
 }

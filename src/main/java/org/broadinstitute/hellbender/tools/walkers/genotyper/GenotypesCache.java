@@ -14,8 +14,6 @@ import org.broadinstitute.hellbender.utils.Utils;
  */
 public final class GenotypesCache {
 
-    private static final Logger logger = LogManager.getLogger(GenotypesCache.class);
-
     /**
      * The current maximum ploidy supported by the tables.  Initial value may be anything positive.
      */

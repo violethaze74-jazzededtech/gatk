@@ -13,15 +13,12 @@ import org.broadinstitute.hellbender.utils.genotyper.LikelihoodMatrix;
 import java.util.Arrays;
 
 /**
- * This class has just one fundamental responsibility: calculating genotype likelihoods through the formula:
+ * This class has a single responsibility: calculating genotype likelihoods given allele likelihoods through the formula:
  *
  * Prob(reads | genotype) = product_{all reads} [[sum_{alleles in genotype} Prob(read | allele)]/ploidy]
  *
  * Note that this applies to non-somatic variant calling, where ploidy is a known integer and genotypes are given by the
  * number of copies of each allele.
- *
- * There is some unfortunate mixing-in of getting cached GenotypeAlleleCounts objects that will hopefully be improved
- * in future refactoring.
  *
  * COMPUTATIONAL NOTE
  * In the multiallelic calculation we accumulate the likelihood contribution of each read one allele at a time.  That is,
@@ -152,27 +149,4 @@ public class GenotypeLikelihoodCalculator {
         return ImmutablePair.of(log10LikelihoodsByAlleleAndRead, scaleFactor);
     }
 
-    /**
-     * Composes a genotype index map given a allele index recoding such that result[i] is the index of the old
-     * genotype corresponding to the ith new genotype.
-     *
-     * @param newToOldAlleleMap allele recoding such that newToOldAlleleMap[i] is the index of the old allele
-     *                               corresponding to the ith new allele
-     *
-     * @throws IllegalArgumentException if this calculator cannot handle the recoding provided. This is
-     * the case when any {@code oldToNewAllelesIndexMap} element is negative.
-     *
-     * @return never {@code null}.
-     */
-    public static int[] newToOldGenotypeMap(final int ploidy, final int[] newToOldAlleleMap) {
-        Utils.nonNull(newToOldAlleleMap);
-        final int newAlleleCount = newToOldAlleleMap.length;
-
-        final int[] result = new int[GenotypeIndexCalculator.genotypeCount(ploidy, newAlleleCount)];
-        for (final GenotypeAlleleCounts newGAC : GenotypeAlleleCounts.iterable(ploidy, newAlleleCount)) {
-            result[newGAC.index()] = GenotypeIndexCalculator.alleleCountsToIndex(newGAC, newToOldAlleleMap);
-        }
-
-        return result;
-    }
 }
