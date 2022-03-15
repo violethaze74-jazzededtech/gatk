@@ -1,5 +1,6 @@
 package org.broadinstitute.hellbender.tools.walkers.genotyper;
 
+import org.apache.commons.math3.exception.MathArithmeticException;
 import org.broadinstitute.hellbender.utils.IndexRange;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -54,6 +55,11 @@ public class GenotypeIndexCalculatorUnitTest {
             final int recursive = 1 + new IndexRange(0, ploidy).sumInt(n -> GenotypeIndexCalculator.genotypeCount(ploidy - n, alleleCount - 1));
             Assert.assertEquals(direct, recursive);
         }
+    }
+
+    @Test(expectedExceptions = MathArithmeticException.class)
+    public void testGenotypeCountOverflow() throws Exception {
+        final int genotypeCount = GenotypeIndexCalculator.genotypeCount(10_000, 10_000);
     }
 
     // alleles list, expected index

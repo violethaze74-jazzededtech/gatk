@@ -381,12 +381,7 @@ public final class AlleleSubsettingUtils {
         final int[] result = new int[GenotypeLikelihoods.numLikelihoods(newAlleles.size(), ploidy)];
         final Permutation<Allele> allelePermutation = new IndexedAlleleList<>(originalAlleles).permutation(new IndexedAlleleList<>(newAlleles));
 
-        final GenotypeLikelihoodCalculator glCalc = GL_CALCS.getInstance(ploidy, originalAlleles.size());
-
-        // TODO: replace this with GenotypesCache::iterator
-        for (int oldPLIndex = 0; oldPLIndex < glCalc.genotypeCount(); oldPLIndex++) {
-            final GenotypeAlleleCounts oldAlleleCounts = glCalc.genotypeAlleleCountsAt(oldPLIndex);
-
+        for (final GenotypeAlleleCounts oldAlleleCounts : GenotypeAlleleCounts.iterable(ploidy, originalAlleles.size())) {
             final boolean containsOnlyNewAlleles = IntStream.range(0, oldAlleleCounts.distinctAlleleCount())
                     .map(oldAlleleCounts::alleleIndexAt).allMatch(allelePermutation::isKept);
 
@@ -397,7 +392,7 @@ public final class AlleleSubsettingUtils {
                         IntStream.of(newAlleleIndex, oldAlleleCounts.alleleCountFor(allelePermutation.fromIndex(newAlleleIndex)))).toArray();
 
                 final int newPLIndex = GenotypeIndexCalculator.alleleCountsToIndex(newAlleleCounts);
-                result[newPLIndex] = oldPLIndex;
+                result[newPLIndex] = oldAlleleCounts.index();
             }
         }
         return  result;

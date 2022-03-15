@@ -4,6 +4,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.broadinstitute.hellbender.utils.Utils;
 
+import java.util.Iterator;
+
 /**
  * This class holds caches of {@link GenotypeAlleleCounts} for multiple fixed ploidy, allele count pairs,
  * allowing for fast random access of genotypes.  Note that the increment method of GenotypeAlleleCounts is always fast,
@@ -24,7 +26,7 @@ public final class GenotypesCache {
     /**
      * The current number of cached genotypes per ploidy
      */
-    private static int cacheSizePerPloidy = 100;
+    private static int cacheSizePerPloidy = 10;
 
     /**
      * Maximum possible number of cached {@link GenotypeAlleleCounts} for each fixed ploidy and allele count.

@@ -11,6 +11,7 @@ import org.broadinstitute.hellbender.utils.functional.IntToDoubleBiFunction;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.function.IntConsumer;
 import java.util.stream.Collectors;
@@ -19,7 +20,8 @@ import java.util.stream.IntStream;
 /**
  * Collection of allele counts for a genotype. It encompasses what alleles are present in the genotype and in what number.</p>
  *
- * Also, it stores its index within the canonical ordering of genotypes and can efficiently generate the next genotype in that order. </p>
+ * Also, it stores its index within the canonical ordering of genotypes and can efficiently generate the next genotype in that order, which is used
+ * in  static method for iterating over all genotypes of a given ploidy and allele count.
  *
  * <p>Alleles are represented herein by their indices running from <b>0</b> to <b>N-1</b> where <i>N</i> is the number of alleles.</p>
  *
@@ -144,6 +146,45 @@ public final class GenotypeAlleleCounts implements Comparable<GenotypeAlleleCoun
     }
 
     public int ploidy() { return ploidy; }
+
+    private static Iterator<GenotypeAlleleCounts> iterator(final int ploidy, final int alleleCount) {
+        return new Iterator<GenotypeAlleleCounts>() {
+            private int index = 0;
+            private int numGenotypes = GenotypeIndexCalculator.genotypeCount(ploidy, alleleCount);
+            private GenotypeAlleleCounts alleleCounts = first(ploidy);
+
+            @Override
+            public boolean hasNext() {
+                return index < numGenotypes;
+            }
+
+            @Override
+            public GenotypeAlleleCounts next() {
+                if (index++ > 0) {
+                    alleleCounts.increase();
+                }
+                return alleleCounts;
+            }
+        };
+    }
+
+    /**
+     * Iterate over all GenotypeAlleleCounts for a given ploidy and allele count in the canonical order.
+     *
+     * This is the preferred way to access all GenotypeAlleleCounts in sequence, such as when computing genotype likelihoods.
+     * Thanks to the efficiency of the increase() method this iteration is extremely fast.
+     */
+    public static Iterable<GenotypeAlleleCounts> iterable(final int ploidy, final int alleleCount) {
+        return new Iterable<GenotypeAlleleCounts>() {
+            private final int p = ploidy;
+            private final int a = alleleCount;
+
+            @Override
+            public Iterator<GenotypeAlleleCounts> iterator() {
+                return GenotypeAlleleCounts.iterator(p,a);
+            }
+        };
+    }
 
     /**
      * Increases the allele counts a number of times.

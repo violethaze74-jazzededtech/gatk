@@ -213,18 +213,6 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
         return ImmutablePair.of(log10LikelihoodsByAlleleAndRead, scaleFactor);
     }
 
-    // note that if the input has a high index that is not cached, it will be mutated in order to form the output
-    private GenotypeAlleleCounts nextGenotypeAlleleCounts(final GenotypeAlleleCounts alleleCounts) {
-        final int index = alleleCounts.index();
-        if (index < (GenotypesCache.MAX_CACHE_SIZE_PER_PLOIDY - 1)) {
-            return genotypeAlleleCounts[index + 1];
-        } else if (index == GenotypesCache.MAX_CACHE_SIZE_PER_PLOIDY - 1) {
-            return genotypeAlleleCounts[index].copy().increase();
-        } else {
-            return alleleCounts.increase();
-        }
-    }
-
     /**
      * Returns the ploidy for this genotype likelihood calculator.
      * @return 0 or greater.
@@ -283,6 +271,18 @@ public class GenotypeLikelihoodCalculator implements Iterable<GenotypeAlleleCoun
             public GenotypeAlleleCounts next() {
                 alleleCounts = index++ == 0 ? genotypeAlleleCounts[0] : nextGenotypeAlleleCounts(alleleCounts);
                 return alleleCounts;
+            }
+
+            // note that if the input has a high index that is not cached, it will be mutated in order to form the output
+            private GenotypeAlleleCounts nextGenotypeAlleleCounts(final GenotypeAlleleCounts alleleCounts) {
+                final int index = alleleCounts.index();
+                if (index < (GenotypesCache.MAX_CACHE_SIZE_PER_PLOIDY - 1)) {
+                    return genotypeAlleleCounts[index + 1];
+                } else if (index == GenotypesCache.MAX_CACHE_SIZE_PER_PLOIDY - 1) {
+                    return genotypeAlleleCounts[index].copy().increase();
+                } else {
+                    return alleleCounts.increase();
+                }
             }
         };
     }

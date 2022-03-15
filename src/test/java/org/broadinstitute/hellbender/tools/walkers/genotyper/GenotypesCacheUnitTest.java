@@ -76,18 +76,18 @@ public final class GenotypesCacheUnitTest extends GATKBaseTest {
         }
     }
 
-    @Test(expectedExceptions = MathArithmeticException.class)
-    public void testGenotypeCountOverflow() throws Exception {
-        final int genotypeCount = GenotypeIndexCalculator.genotypeCount(10_000, 10_000);
-    }
 
-    @Test(expectedExceptions = IllegalArgumentException.class)
-    public void testGenotypeCountNegativePloidy() throws Exception {
-        GenotypeIndexCalculator.genotypeCount(-1, 1);
-    }
+    // TODO: this is a one-off benchmark
+    @Test
+    public void benchmarkCache2() {
+        final int ploidy = 2;
+        final int alleleCount = 3;
 
-    @Test(expectedExceptions = IllegalArgumentException.class)
-    public void testGenotypeCountNegativeAlleleCount() throws Exception {
-        GenotypeIndexCalculator.genotypeCount(1, -1);
+        for (int n = 0; n < 10_000_000; n++) {
+            int m = 0;
+            for (final GenotypeAlleleCounts gac : GenotypeAlleleCounts.iterable(ploidy, alleleCount)) {
+                m++;
+            }
+        }
     }
 }
