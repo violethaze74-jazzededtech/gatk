@@ -61,6 +61,10 @@ public final class GenotypesCache {
     private static synchronized void extendCache(final int ploidy, final int newSize) {
         final List<GenotypeAlleleCounts> cache = caches.get(ploidy);
 
+        if (cache.isEmpty()) {
+            cache.add(GenotypeAlleleCounts.first(ploidy));
+        }
+
         while (cache.size() < newSize) {
             cache.add(cache.get(cache.size() - 1).next());
         }
@@ -71,14 +75,14 @@ public final class GenotypesCache {
      */
     private static void ensureCapacity(final int genotypeIndex, final int ploidy) {
         // add empty lists of genotypes until we have initialized all ploidies up to and including this one
-        while (ploidy > caches.size()) {
+        while (ploidy >= caches.size()) {
             caches.add(new ArrayList<>());
         }
 
         final List<GenotypeAlleleCounts> cache = caches.get(ploidy);
 
-        if (cache.size() < genotypeIndex && cache.size() < MAX_CACHE_SIZE) {
-            final int newSize = Math.min(Math.max(cache.size() * 2, genotypeIndex), MAX_CACHE_SIZE);
+        if (cache.size() <= genotypeIndex && cache.size() < MAX_CACHE_SIZE) {
+            final int newSize = Math.min(Math.max(cache.size() * 2 + 1, genotypeIndex), MAX_CACHE_SIZE);
             extendCache(ploidy, newSize);
         }
     }
