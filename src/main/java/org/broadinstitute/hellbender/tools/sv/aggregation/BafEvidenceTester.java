@@ -5,8 +5,6 @@ import htsjdk.samtools.SAMSequenceDictionary;
 import org.apache.commons.math3.stat.descriptive.rank.Median;
 import org.broadinstitute.hellbender.tools.sv.BafEvidence;
 import org.broadinstitute.hellbender.tools.sv.SVCallRecord;
-import org.broadinstitute.hellbender.utils.MannWhitneyU;
-import picard.util.MathUtil;
 
 import java.io.PrintStream;
 import java.util.*;
@@ -15,9 +13,11 @@ import java.util.stream.Collectors;
 public class BafEvidenceTester {
 
     private final SAMSequenceDictionary dictionary;
+    private final Median median;
 
     public BafEvidenceTester(final SAMSequenceDictionary dictionary) {
         this.dictionary = dictionary;
+        this.median = new Median();
     }
 
     private static void print(final SVCallRecord record, final String sample, final SampleStats stats, final Set<String> carrierSamples, final PrintStream printStream) {
@@ -33,7 +33,6 @@ public class BafEvidenceTester {
         builder.add(record.getType().name());
         builder.add(String.valueOf(sample));
         builder.add(String.valueOf(carrierSamples.contains(sample)));
-        builder.add(String.valueOf(stats.isROH));
         builder.add(String.valueOf(stats.deletionRatio));
         builder.add(String.valueOf(stats.beforeHetCount));
         builder.add(String.valueOf(stats.innerHetCount));
@@ -58,26 +57,15 @@ public class BafEvidenceTester {
         printStream.println(String.join("\t", builder));
     }
 
-    public TestResult calculateLogLikelihood(final SVCallRecord record, final List<BafEvidence> evidence, final Set<String> excludedSamples, final PrintStream printStream) {
+    public TestResult calculateLogLikelihood(final SVCallRecord record, final List<BafEvidence> evidence, final Set<String> excludedSamples) {
+        if (evidence == null || evidence.isEmpty()) {
+            return new TestResult(null, null);
+        }
         final Set<String> carrierSamples = Sets.difference(record.getCarrierSampleSet(), excludedSamples);
         final Set<String> allSamples = Sets.difference(record.getAllSamples(), excludedSamples);
-        if (evidence == null || evidence.isEmpty()) {
-            return null;
-        }
         final List<BafEvidence> filteredEvidence = evidence.stream().filter(baf -> allSamples.contains(baf.getSample())).collect(Collectors.toList());
-        final List<BafEvidence> beforeBaf = new ArrayList<>(filteredEvidence.size());
-        final List<BafEvidence> innerBaf = new ArrayList<>(filteredEvidence.size());
-        final List<BafEvidence> afterBaf = new ArrayList<>(filteredEvidence.size());
-        for (final BafEvidence baf : filteredEvidence) {
-            if (baf.getStart() < record.getPositionA()) {
-                beforeBaf.add(baf);
-            } else if (baf.getStart() >= record.getPositionB()) {
-                afterBaf.add(baf);
-            } else {
-                innerBaf.add(baf);
-            }
-        }
 
+        final List<BafEvidence> innerBaf = new ArrayList<>(filteredEvidence.size());
         final Map<String, SampleStats> sampleStats = allSamples.stream().collect(Collectors.toMap(s -> s, s -> new SampleStats()));
         for (final BafEvidence baf : filteredEvidence) {
             if (baf.getStart() < record.getPositionA()) {
@@ -86,64 +74,42 @@ public class BafEvidenceTester {
                 sampleStats.get(baf.getSample()).afterHetCount++;
             } else {
                 sampleStats.get(baf.getSample()).innerHetCount++;
+                innerBaf.add(baf);
             }
         }
 
-        final double length = record.getLength();
-        final double threshold = Math.min(50. / length, 0.0005);
-        int totalInnerCount = 0;
-        int nullInnerCount = 0;
-        final List<Double> nullRatios = new ArrayList<>();
-        for (final Map.Entry<String, SampleStats> entry : sampleStats.entrySet()) {
-            final String sample = entry.getKey();
-            final SampleStats stats = entry.getValue();
-            if (isRegionOfHomozygosity(stats.beforeHetCount, stats.innerHetCount, stats.afterHetCount, length, threshold)) {
-                stats.isROH = true;
-            } else {
-                stats.deletionRatio = deletionTestStatistic(stats.beforeHetCount, stats.innerHetCount, stats.afterHetCount, length, threshold);
-                if (!carrierSamples.contains(sample)) {
-                    nullRatios.add(stats.deletionRatio);
-                    nullInnerCount += stats.innerHetCount;
-                }
-            }
-            totalInnerCount += stats.innerHetCount;
-        }
-        final double nullMean = nullInnerCount / (1.0 + nullRatios.size());
+        final Double deletionStatistic = calculateDeletionTestStatistic(record, sampleStats, carrierSamples);
+        final Double duplicationStatistic = calculateDuplicationTestStatistic(innerBaf, carrierSamples);
+        return new TestResult(deletionStatistic, duplicationStatistic);
 
-        //Filter
         /*
-        if (nullRatios.size() < 10) {
-            return null;
-        }
-        if (nullRatios.size() <= 10 || totalInnerCount < 10) {
-            return null;
-        }
-        final double minNullRatio = nullRatios.stream().mapToDouble(d -> d).min().getAsDouble();
-        final double maxNullRatio = nullRatios.stream().mapToDouble(d -> d).max().getAsDouble();
-        if (maxNullRatio - minNullRatio < 0.0001) {
-            return null;
-        }
-        final List<SampleStats> carrierStats = carrierSamples.stream().map(sampleStats::get).filter(s -> !s.isROH).collect(Collectors.toList());
-        if (carrierStats.isEmpty() || carrierStats.size() > nullRatios.size()) {
-            return null;
-        }
-         */
-
         final double[] nullBaf = innerBaf.stream().filter(baf -> !carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
         final double[] carrierBaf = innerBaf.stream().filter(baf -> carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
-        // Mann-Whitney test
-        if (nullBaf.length == 0 || carrierBaf.length == 0) {
+        // Kolmogorov-Smirnov test
+        if (nullBaf.length < 30 || carrierBaf.length < 30) {
             return null;
         }
-        if (record.getId().equals("batch1_manta_chr22_chr22_485")) {
-            int x = 0;
-        }
-        final MannWhitneyU mwu = new MannWhitneyU();
-        final double meanNull = MathUtil.mean(nullBaf);
-        final double meanCarrier = MathUtil.mean(carrierBaf);
-        final double mannWhitneyP = mwu.test(nullBaf, carrierBaf, MannWhitneyU.TestType.FIRST_DOMINATES).getP();
-        if (Double.isNaN(mannWhitneyP)) {
-            return null; //TODO
+        final double meanNull = new Median().evaluate(nullBaf);
+        final double meanCarrier = new Median().evaluate(carrierBaf);
+
+        final double ksP;
+        if (nullBaf.length == 1) {
+            final EmpiricalDistribution d = new EmpiricalDistribution();
+            //d.load(carrierBaf);
+            //ksP = 1.0 - d.cumulativeProbability(nullBaf[0]);
+            return null;
+        } else if (carrierBaf.length == 1) {
+            final EmpiricalDistribution d = new EmpiricalDistribution();
+            //d.load(nullBaf);
+            //ksP = d.cumulativeProbability(carrierBaf[0]);
+            return null;
+        } else {
+            final TTest ttest = new TTest();
+            final double p = ttest.tTest(nullBaf, carrierBaf);
+            ksP = meanCarrier < meanNull ? p : 1. - p;
+            //final KolmogorovSmirnovTest ksTest = new KolmogorovSmirnovTest(); // TODO set random seed
+            //ksP = 0; //ksTest.kolmogorovSmirnovTest(nullBaf, carrierBaf, false);
+            //ksP = ksTest.approximateP(ksTest.kolmogorovSmirnovStatistic(nullBaf, carrierBaf), nullBaf.length, carrierBaf.length);
         }
 
         // Het count ratio stats (deletions)
@@ -155,38 +121,81 @@ public class BafEvidenceTester {
         final double medianBackgroundAbsoluteDeviation = median.evaluate(nullRatios.stream().mapToDouble(d -> Math.abs(medianBackgroundRatio - d)).toArray());
         final double hetCountRatioZ = (medianCarrierRatio - medianBackgroundRatio) / Math.max(0.001, medianBackgroundAbsoluteDeviation);
 
-        print2(record, meanNull, meanCarrier, mannWhitneyP, printStream);
+        print2(record, meanNull, meanCarrier, ksP, printStream);
 
         return new TestResult(hetCountRatioZ, meanCarrier);
 
+         */
+
     }
 
-    /*
-    private TTestResult tTest(final Map<String, SampleStats> sampleStats, final List<Double> nullRatios,
-                              final int totalInnerCount, final GaussianMixtureModel gmm) {
-        final List<double[]> posterior = statsList.stream()
-                .map(s -> new DenseVector(new double[]{s.deletionRatio})).map(gmm::predictSoft).collect(Collectors.toList());
-        final double mean = nullRatios.stream().mapToDouble(Double::new).map(d -> Math.pow(10., -d)).sum() / nullRatios.size();
-        final double logLik = posterior.stream()
-                .mapToDouble(arr -> Math.log(MathUtils.arrayMax(arr)))
-                .sum();
-        return new TTestResult(mean, logLik);
-    }*/
+    private Double calculateDuplicationTestStatistic(final List<BafEvidence> evidence, final Set<String> carrierSamples) {
+        final double[] nullBaf = evidence.stream().filter(baf -> !carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
+        final double[] carrierBaf = evidence.stream().filter(baf -> carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
+        if (nullBaf.length < 30 || carrierBaf.length < 30) {
+            return null;
+        }
+        final double meanNull = median.evaluate(nullBaf);
+        final double meanCarrier = median.evaluate(carrierBaf);
+        return meanNull - meanCarrier;
+    }
+
+    private Double calculateDeletionTestStatistic(final SVCallRecord record,
+                                                  final Map<String, SampleStats> sampleStats,
+                                                  final Set<String> carrierSamples) {
+        final double length = record.getLength();
+        final double threshold = Math.min(50. / length, 0.0005);
+        int totalInnerCount = 0;
+        final List<Double> nullRatios = new ArrayList<>();
+        for (final Map.Entry<String, SampleStats> entry : sampleStats.entrySet()) {
+            final String sample = entry.getKey();
+            final SampleStats stats = entry.getValue();
+            if (!isRegionOfHomozygosity(stats.beforeHetCount, stats.innerHetCount, stats.afterHetCount, length, threshold)) {
+                stats.deletionRatio = calculateDeletionRatio(stats.beforeHetCount, stats.innerHetCount, stats.afterHetCount, length, threshold);
+                if (!carrierSamples.contains(sample)) {
+                    nullRatios.add(stats.deletionRatio);
+                }
+            }
+            totalInnerCount += stats.innerHetCount;
+        }
+
+        if (nullRatios.size() <= 10 || totalInnerCount < 10) {
+            return null;
+        }
+        final double minNullRatio = nullRatios.stream().mapToDouble(d -> d).min().getAsDouble();
+        final double maxNullRatio = nullRatios.stream().mapToDouble(d -> d).max().getAsDouble();
+        if (maxNullRatio - minNullRatio < 0.0001) {
+            return null;
+        }
+        final List<SampleStats> carrierStats = carrierSamples.stream().map(sampleStats::get).filter(s -> s.deletionRatio != null).collect(Collectors.toList());
+        if (carrierStats.isEmpty() || carrierStats.size() > nullRatios.size()) {
+            return null;
+        }
+        final double[] carrierRatiosArr = carrierSamples.stream().map(sampleStats::get).filter(s -> s.deletionRatio != null).mapToDouble(s -> s.deletionRatio).toArray();
+        return median.evaluate(carrierRatiosArr);
+    }
 
     private static final class SampleStats {
         public int beforeHetCount = 0;
         public int innerHetCount = 0;
         public int afterHetCount = 0;
         public Double deletionRatio = null;
-        public boolean isROH = false;
     }
 
     public static final class TestResult {
-        public final double hetCountRatioZ;
-        public final double mannWhitneyP;
-        public TestResult(final double hetCountRatioZ, final double mannWhitneyP) {
-            this.hetCountRatioZ = hetCountRatioZ;
-            this.mannWhitneyP = mannWhitneyP;
+        private final Double delStat;
+        private final Double dupStat;
+        public TestResult(final Double delStat, final Double dupStat) {
+            this.delStat = delStat;
+            this.dupStat = dupStat;
+        }
+
+        public Double getDelStat() {
+            return delStat;
+        }
+
+        public Double getDupStat() {
+            return dupStat;
         }
     }
 
@@ -195,38 +204,8 @@ public class BafEvidenceTester {
             (beforeHetCount  < threshold * length || afterHetCount < threshold * length);
     }
 
-    protected static double deletionTestStatistic(final int beforeHetCount, final int innerHetCount, final int afterHetCount, final double length, final double threshold) {
+    protected static double calculateDeletionRatio(final int beforeHetCount, final int innerHetCount, final int afterHetCount, final double length, final double threshold) {
         final int flankHetCount = Math.min(beforeHetCount, afterHetCount);
         return Math.log10(innerHetCount + length * threshold) - Math.log10(flankHetCount + length * threshold);
-    }
-
-    protected static Map<String, Integer> countSampleHets(final Collection<BafEvidence> evidence) {
-        return evidence.stream()
-                .collect(Collectors.groupingBy(BafEvidence::getSample,
-                        Collectors.collectingAndThen(Collectors.toList(), list -> list.stream().mapToInt(o -> 1).sum())));
-    }
-
-    public static final class BafEvidenceTestResult {
-        private final double logLik;
-        private final double snpRatio;
-        private final double ksStat;
-
-        public BafEvidenceTestResult(final double logLik, final double snpRatio, final double ksStat) {
-            this.logLik = logLik;
-            this.snpRatio = snpRatio;
-            this.ksStat = ksStat;
-        }
-
-        public double getLogLikelihood() {
-            return logLik;
-        }
-
-        public double getSnpRatio() {
-            return snpRatio;
-        }
-
-        public double getKsStat() {
-            return ksStat;
-        }
     }
 }

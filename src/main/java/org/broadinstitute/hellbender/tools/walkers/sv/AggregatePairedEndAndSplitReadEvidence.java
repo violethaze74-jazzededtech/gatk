@@ -449,7 +449,12 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
             }
             if (bafCollectionEnabled()) {
                 final List<BafEvidence> bafEvidence = bafCollector.collectEvidence(record);
-                bafEvidenceTester.calculateLogLikelihood(record, bafEvidence, excludedSamples, printStream);
+                final BafEvidenceTester.TestResult result = bafEvidenceTester.calculateLogLikelihood(record, bafEvidence, excludedSamples);
+                // Dup stat is on [0, 0.5], so multiply by 200
+                final Integer dupQ = result.getDupStat() == null ? null : (int) Math.min(result.getDupStat() * 200, 99);
+                // Del stat is a real number
+                // TODO
+
             }
         }
         outputBuffer.add(SVCallRecordUtils.getVariantBuilder(record).make());
