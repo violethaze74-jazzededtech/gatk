@@ -9,20 +9,23 @@ import org.broadinstitute.hellbender.utils.SimpleInterval;
 public class BafEvidenceAggregator extends SVEvidenceAggregator<BafEvidence> {
 
     private final int minSize;
+    private final int maxSize;
     private final double paddingFraction;
 
     public BafEvidenceAggregator(final FeatureDataSource<BafEvidence> source,
                                  final SAMSequenceDictionary dictionary,
                                  final int minSize,
+                                 final int maxSize,
                                  final double paddingFraction) {
         super(source, dictionary);
         this.minSize = minSize;
+        this.maxSize = maxSize;
         this.paddingFraction = paddingFraction;
     }
 
     @Override
     public SimpleInterval getEvidenceQueryInterval(final SVCallRecord call) {
-        if (call.isSimpleCNV() && call.getLength() >= minSize) {
+        if (call.isSimpleCNV() && call.getLength() >= minSize && call.getLength() <= maxSize) {
             final int padding = (int) Math.ceil(call.getLength() * paddingFraction);
             return new SimpleInterval(call.getContigA(), call.getPositionA(), call.getPositionB())
                     .expandWithinContig(padding, dictionary);

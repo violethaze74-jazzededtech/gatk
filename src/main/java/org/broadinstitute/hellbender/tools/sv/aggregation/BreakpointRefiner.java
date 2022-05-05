@@ -188,7 +188,7 @@ public class BreakpointRefiner {
         // Create new record
         return new SVCallRecord(record.getId(), record.getContigA(), refinedStartPosition,
                 record.getStrandA(), record.getContigB(), refinedEndPosition, record.getStrandB(), record.getType(),
-                length, record.getAlgorithms(), record.getAlleles(), newGenotypes, refinedAttr);
+                length, record.getAlgorithms(), record.getAlleles(), newGenotypes, refinedAttr, dictionary);
     }
 
     private static EvidenceStatUtils.PoissonTestResult calculateBothsideTest(final SplitReadSite startSite,

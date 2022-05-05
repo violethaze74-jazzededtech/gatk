@@ -2,6 +2,7 @@ package org.broadinstitute.hellbender.tools.sv.aggregation;
 
 import com.google.common.collect.Sets;
 import htsjdk.samtools.SAMSequenceDictionary;
+import htsjdk.variant.variantcontext.StructuralVariantType;
 import org.apache.commons.math3.stat.descriptive.rank.Median;
 import org.broadinstitute.hellbender.tools.sv.BafEvidence;
 import org.broadinstitute.hellbender.tools.sv.SVCallRecord;
@@ -57,9 +58,9 @@ public class BafEvidenceTester {
         printStream.println(String.join("\t", builder));
     }
 
-    public TestResult calculateLogLikelihood(final SVCallRecord record, final List<BafEvidence> evidence, final Set<String> excludedSamples) {
+    public Double calculateLogLikelihood(final SVCallRecord record, final List<BafEvidence> evidence, final Set<String> excludedSamples) {
         if (evidence == null || evidence.isEmpty()) {
-            return new TestResult(null, null);
+            return null;
         }
         final Set<String> carrierSamples = Sets.difference(record.getCarrierSampleSet(), excludedSamples);
         final Set<String> allSamples = Sets.difference(record.getAllSamples(), excludedSamples);
@@ -78,9 +79,11 @@ public class BafEvidenceTester {
             }
         }
 
-        final Double deletionStatistic = calculateDeletionTestStatistic(record, sampleStats, carrierSamples);
-        final Double duplicationStatistic = calculateDuplicationTestStatistic(innerBaf, carrierSamples);
-        return new TestResult(deletionStatistic, duplicationStatistic);
+        if (record.getType() == StructuralVariantType.DEL) {
+            return calculateDeletionTestStatistic(record, sampleStats, carrierSamples);
+        } else {
+            return calculateDuplicationTestStatistic(innerBaf, carrierSamples);
+        }
 
         /*
         final double[] nullBaf = innerBaf.stream().filter(baf -> !carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
@@ -172,6 +175,9 @@ public class BafEvidenceTester {
             return null;
         }
         final double[] carrierRatiosArr = carrierSamples.stream().map(sampleStats::get).filter(s -> s.deletionRatio != null).mapToDouble(s -> s.deletionRatio).toArray();
+        if (median.evaluate(carrierRatiosArr) < 0) {
+            int x = 0;
+        }
         return median.evaluate(carrierRatiosArr);
     }
 

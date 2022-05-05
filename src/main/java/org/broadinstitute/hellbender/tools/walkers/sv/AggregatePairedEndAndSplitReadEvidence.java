@@ -85,6 +85,7 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
     public static final String SR_WINDOW_LONG_NAME = "sr-window";
     public static final String SR_INSERTION_CROSSOVER_LONG_NAME = "sr-insertion-crossover";
     public static final String BAF_MIN_SIZE_LONG_NAME = "baf-min-size";
+    public static final String BAF_MAX_SIZE_LONG_NAME = "baf-max-size";
     public static final String BAF_PADDING_FRACTION_LONG_NAME = "baf-padding-fraction";
     public static final String X_CHROMOSOME_LONG_NAME = "x-chromosome-name";
     public static final String Y_CHROMOSOME_LONG_NAME = "y-chromosome-name";
@@ -169,6 +170,14 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
             optional = true
     )
     private int bafMinSize = 5000;
+
+    @Argument(
+            doc = "Maximum variant size for BAF aggregation",
+            fullName = BAF_MAX_SIZE_LONG_NAME,
+            minValue = 0,
+            optional = true
+    )
+    private int bafMaxSize = 10000000;
 
     @Argument(
             doc = "BAF flanking region size as a fraction of variant size",
@@ -293,7 +302,7 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
 
     private void initializeBAFCollection() {
         initializeBAFEvidenceDataSource();
-        bafCollector = new BafEvidenceAggregator(bafSource, dictionary, bafMinSize, bafPaddingFraction);
+        bafCollector = new BafEvidenceAggregator(bafSource, dictionary, bafMinSize, bafMaxSize, bafPaddingFraction);
         bafEvidenceTester = new BafEvidenceTester(dictionary);
         try {
             printStream = new PrintStream("/Users/markw/Work/talkowski/sv-pipe-testing/mw-sv-agg/baftest/baf_out.tsv");
@@ -449,12 +458,12 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
             }
             if (bafCollectionEnabled()) {
                 final List<BafEvidence> bafEvidence = bafCollector.collectEvidence(record);
-                final BafEvidenceTester.TestResult result = bafEvidenceTester.calculateLogLikelihood(record, bafEvidence, excludedSamples);
-                // Dup stat is on [0, 0.5], so multiply by 200
-                final Integer dupQ = result.getDupStat() == null ? null : (int) Math.min(result.getDupStat() * 200, 99);
-                // Del stat is a real number
-                // TODO
-
+                final Double result = bafEvidenceTester.calculateLogLikelihood(record, bafEvidence, excludedSamples);
+                //final boolean isDel = record.getType() == StructuralVariantType.DEL;
+                //final Double q = result == null ? null : isDel ? (double) QualityUtils.errorProbToQual(result) : (int) Math.min(result * 200, 99);
+                final Map<String, Object> attributes = new HashMap<>();
+                attributes.put(GATKSVVCFConstants.BAF_QUALITY_ATTRIBUTE, result);
+                record = SVCallRecordUtils.copyCallWithNewAttributes(record, attributes);
             }
         }
         outputBuffer.add(SVCallRecordUtils.getVariantBuilder(record).make());
@@ -501,6 +510,10 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
             header.addMetaDataLine(new VCFFormatHeaderLine(GATKSVVCFConstants.DISCORDANT_PAIR_COUNT_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Discordant pair count"));
             header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.DISCORDANT_PAIR_QUALITY_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Discordant pair quality"));
             header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.DISCORDANT_PAIR_CARRIER_SIGNAL_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Carrier sample discordant pair signal"));
+        }
+        if (bafCollectionEnabled()) {
+            // TODO make integer
+            header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.BAF_QUALITY_ATTRIBUTE, 1, VCFHeaderLineType.Float, "B-allele frequency quality"));
         }
         return header;
     }

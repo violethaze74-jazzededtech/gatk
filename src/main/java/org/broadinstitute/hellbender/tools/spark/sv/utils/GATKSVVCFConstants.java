@@ -109,6 +109,7 @@ public final class GATKSVVCFConstants {
     public static final String DISCORDANT_PAIR_COUNT_ATTRIBUTE = "PE";
     public static final String DISCORDANT_PAIR_QUALITY_ATTRIBUTE = "PEQ";
     public static final String DISCORDANT_PAIR_CARRIER_SIGNAL_ATTRIBUTE = "PECS";
+    public static final String BAF_QUALITY_ATTRIBUTE = "BAFQ";
 
     // filter block
     public static final String ASSEMBLY_BASED_VARIANT_MQ_FILTER_KEY = "LOW_MQ";
