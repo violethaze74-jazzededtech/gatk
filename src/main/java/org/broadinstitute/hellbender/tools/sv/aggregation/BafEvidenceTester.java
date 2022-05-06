@@ -59,6 +59,9 @@ public class BafEvidenceTester {
     }
 
     public Double calculateLogLikelihood(final SVCallRecord record, final List<BafEvidence> evidence, final Set<String> excludedSamples) {
+        if (!record.isSimpleCNV()) {
+            return null;
+        }
         if (evidence == null || evidence.isEmpty()) {
             return null;
         }

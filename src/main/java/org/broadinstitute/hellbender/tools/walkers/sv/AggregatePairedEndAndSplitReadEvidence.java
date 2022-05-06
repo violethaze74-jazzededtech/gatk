@@ -435,8 +435,8 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
     public void secondPassApply(final VariantContext variant, final ReadsContext readsContext,
                                 final ReferenceContext referenceContext, final FeatureContext featureContext) {
         SVCallRecord record = SVCallRecordUtils.create(variant);
+        final Set<String> excludedSamples = getSamplesToExcludeForStatsBySex(record);
         if (!record.isDepthOnly()) {
-            final Set<String> excludedSamples = getSamplesToExcludeForStatsBySex(record);
             flushOutputBuffer(record.getPositionAInterval());
             if (discordantPairCollectionEnabled()) {
                 final List<DiscordantPairEvidence> discordantPairEvidence = discordantPairCollector.collectEvidence(record);
@@ -456,15 +456,15 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
                 final List<SplitReadEvidence> endSplitReadEvidence = endSplitCollector.collectEvidence(record);
                 record = breakpointRefiner.refineCall(record, startSplitReadEvidence, endSplitReadEvidence, excludedSamples);
             }
-            if (bafCollectionEnabled()) {
-                final List<BafEvidence> bafEvidence = bafCollector.collectEvidence(record);
-                final Double result = bafEvidenceTester.calculateLogLikelihood(record, bafEvidence, excludedSamples);
-                //final boolean isDel = record.getType() == StructuralVariantType.DEL;
-                //final Double q = result == null ? null : isDel ? (double) QualityUtils.errorProbToQual(result) : (int) Math.min(result * 200, 99);
-                final Map<String, Object> attributes = new HashMap<>();
-                attributes.put(GATKSVVCFConstants.BAF_QUALITY_ATTRIBUTE, result);
-                record = SVCallRecordUtils.copyCallWithNewAttributes(record, attributes);
-            }
+        }
+        if (bafCollectionEnabled() && record.isSimpleCNV()) {
+            final List<BafEvidence> bafEvidence = bafCollector.collectEvidence(record);
+            final Double result = bafEvidenceTester.calculateLogLikelihood(record, bafEvidence, excludedSamples);
+            //final boolean isDel = record.getType() == StructuralVariantType.DEL;
+            //final Double q = result == null ? null : isDel ? (double) QualityUtils.errorProbToQual(result) : (int) Math.min(result * 200, 99);
+            final Map<String, Object> attributes = new HashMap<>();
+            attributes.put(GATKSVVCFConstants.BAF_QUALITY_ATTRIBUTE, result);
+            record = SVCallRecordUtils.copyCallWithNewAttributes(record, attributes);
         }
         outputBuffer.add(SVCallRecordUtils.getVariantBuilder(record).make());
     }
