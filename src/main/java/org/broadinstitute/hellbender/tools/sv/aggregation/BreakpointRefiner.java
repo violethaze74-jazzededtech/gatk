@@ -157,8 +157,8 @@ public class BreakpointRefiner {
         final int refinedEndPosition = refinedEndSite.getPosition();
         final Integer length = record.getType().equals(StructuralVariantType.INS) ? record.getLength() : null;
 
-        final Integer startQuality = Double.isNaN(refinedStartSite.getP()) ? null : EvidenceStatUtils.probToQual(refinedStartSite.getP(), MAX_SR_QUALITY);
-        final Integer endQuality = Double.isNaN(refinedEndSite.getP()) ? null : EvidenceStatUtils.probToQual(refinedEndSite.getP(), MAX_SR_QUALITY);
+        final Integer startQuality = refinedStartSite.getP() == null || Double.isNaN(refinedStartSite.getP()) ? null : EvidenceStatUtils.probToQual(refinedStartSite.getP(), MAX_SR_QUALITY);
+        final Integer endQuality = refinedEndSite.getP() == null || Double.isNaN(refinedEndSite.getP()) ? null : EvidenceStatUtils.probToQual(refinedEndSite.getP(), MAX_SR_QUALITY);
         final Integer totalQuality = Double.isNaN(bothsideResult.getP()) ? null : EvidenceStatUtils.probToQual(bothsideResult.getP(), MAX_SR_QUALITY);
         final Map<String, Object> refinedAttr = new HashMap<>(record.getAttributes());
         refinedAttr.put(GATKSVVCFConstants.START_SPLIT_QUALITY_ATTRIBUTE, startQuality);
@@ -175,6 +175,19 @@ public class BreakpointRefiner {
         refinedAttr.put(GATKSVVCFConstants.END_SPLIT_CARRIER_SIGNAL_ATTRIBUTE, endCarrierSignal);
         refinedAttr.put(GATKSVVCFConstants.TOTAL_SPLIT_CARRIER_SIGNAL_ATTRIBUTE, totalCarrierSignal);
 
+        final int newStartPosition;
+        final int newEndPosition;
+        if (record.getType() == StructuralVariantType.INS) {
+            // For insertions, keep track of split read positions but use average as a nominal start
+            newStartPosition = (int) (0.5 * (refinedStartPosition + refinedEndPosition));
+            newEndPosition = newStartPosition;
+            refinedAttr.put(GATKSVVCFConstants.START_SPLIT_POSITION_ATTRIBUTE, refinedStartSite);
+            refinedAttr.put(GATKSVVCFConstants.END_SPLIT_POSITION_ATTRIBUTE, refinedEndSite);
+        } else {
+            newStartPosition = refinedStartPosition;
+            newEndPosition = refinedEndPosition;
+        }
+
         final List<Genotype> genotypes = record.getGenotypes();
         final GenotypesContext newGenotypes = GenotypesContext.create(genotypes.size());
         for (final Genotype genotype : genotypes) {
@@ -186,8 +199,8 @@ public class BreakpointRefiner {
         }
 
         // Create new record
-        return new SVCallRecord(record.getId(), record.getContigA(), refinedStartPosition,
-                record.getStrandA(), record.getContigB(), refinedEndPosition, record.getStrandB(), record.getType(),
+        return new SVCallRecord(record.getId(), record.getContigA(), newStartPosition,
+                record.getStrandA(), record.getContigB(), newEndPosition, record.getStrandB(), record.getType(),
                 length, record.getAlgorithms(), record.getAlleles(), newGenotypes, refinedAttr, dictionary);
     }
 

@@ -1,64 +1,27 @@
 package org.broadinstitute.hellbender.tools.sv.aggregation;
 
 import com.google.common.collect.Sets;
-import htsjdk.samtools.SAMSequenceDictionary;
 import htsjdk.variant.variantcontext.StructuralVariantType;
+import org.apache.commons.math3.distribution.BinomialDistribution;
+import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.commons.math3.stat.descriptive.rank.Median;
 import org.broadinstitute.hellbender.tools.sv.BafEvidence;
 import org.broadinstitute.hellbender.tools.sv.SVCallRecord;
 
-import java.io.PrintStream;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class BafEvidenceTester {
 
-    private final SAMSequenceDictionary dictionary;
     private final Median median;
+    private final NormalDistribution normalDistribution;
 
-    public BafEvidenceTester(final SAMSequenceDictionary dictionary) {
-        this.dictionary = dictionary;
+    public BafEvidenceTester() {
         this.median = new Median();
+        this.normalDistribution = new NormalDistribution(0, 1);
     }
 
-    private static void print(final SVCallRecord record, final String sample, final SampleStats stats, final Set<String> carrierSamples, final PrintStream printStream) {
-        if (record.getContigA().equals("chrX") || record.getContigA().equals("chrY")) {
-            return;
-        }
-        final List<String> builder = new ArrayList<>();
-        builder.add(record.getId());
-        builder.add(record.getContigA());
-        builder.add(String.valueOf(record.getPositionA()));
-        builder.add(String.valueOf(record.getPositionB()));
-        builder.add(String.valueOf(record.getLength()));
-        builder.add(record.getType().name());
-        builder.add(String.valueOf(sample));
-        builder.add(String.valueOf(carrierSamples.contains(sample)));
-        builder.add(String.valueOf(stats.deletionRatio));
-        builder.add(String.valueOf(stats.beforeHetCount));
-        builder.add(String.valueOf(stats.innerHetCount));
-        builder.add(String.valueOf(stats.afterHetCount));
-        printStream.println(String.join("\t", builder));
-    }
-
-    private static void print2(final SVCallRecord record, final double v1, final double v2, final double v3, final PrintStream printStream) {
-        if (record.getContigA().equals("chrX") || record.getContigA().equals("chrY")) {
-            return;
-        }
-        final List<String> builder = new ArrayList<>();
-        builder.add(record.getId());
-        builder.add(record.getContigA());
-        builder.add(String.valueOf(record.getPositionA()));
-        builder.add(String.valueOf(record.getPositionB()));
-        builder.add(String.valueOf(record.getLength()));
-        builder.add(record.getType().name());
-        builder.add(String.valueOf(v1));
-        builder.add(String.valueOf(v2));
-        builder.add(String.valueOf(v3));
-        printStream.println(String.join("\t", builder));
-    }
-
-    public Double calculateLogLikelihood(final SVCallRecord record, final List<BafEvidence> evidence, final Set<String> excludedSamples) {
+    public Double calculateLogLikelihood(final SVCallRecord record, final List<BafEvidence> evidence, final Set<String> excludedSamples, final int flankSize) {
         if (!record.isSimpleCNV()) {
             return null;
         }
@@ -70,12 +33,16 @@ public class BafEvidenceTester {
         final List<BafEvidence> filteredEvidence = evidence.stream().filter(baf -> allSamples.contains(baf.getSample())).collect(Collectors.toList());
 
         final List<BafEvidence> innerBaf = new ArrayList<>(filteredEvidence.size());
+        final List<BafEvidence> beforeBaf = new ArrayList<>(filteredEvidence.size());
+        final List<BafEvidence> afterBaf = new ArrayList<>(filteredEvidence.size());
         final Map<String, SampleStats> sampleStats = allSamples.stream().collect(Collectors.toMap(s -> s, s -> new SampleStats()));
         for (final BafEvidence baf : filteredEvidence) {
             if (baf.getStart() < record.getPositionA()) {
                 sampleStats.get(baf.getSample()).beforeHetCount++;
+                beforeBaf.add(baf);
             } else if (baf.getStart() >= record.getPositionB()) {
                 sampleStats.get(baf.getSample()).afterHetCount++;
+                afterBaf.add(baf);
             } else {
                 sampleStats.get(baf.getSample()).innerHetCount++;
                 innerBaf.add(baf);
@@ -83,62 +50,39 @@ public class BafEvidenceTester {
         }
 
         if (record.getType() == StructuralVariantType.DEL) {
-            return calculateDeletionTestStatistic(record, sampleStats, carrierSamples);
+            return calculateDeletionTestStatistic(record.getLength(), sampleStats, carrierSamples, flankSize);
         } else {
             return calculateDuplicationTestStatistic(innerBaf, carrierSamples);
         }
-
-        /*
-        final double[] nullBaf = innerBaf.stream().filter(baf -> !carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
-        final double[] carrierBaf = innerBaf.stream().filter(baf -> carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
-        // Kolmogorov-Smirnov test
-        if (nullBaf.length < 30 || carrierBaf.length < 30) {
-            return null;
-        }
-        final double meanNull = new Median().evaluate(nullBaf);
-        final double meanCarrier = new Median().evaluate(carrierBaf);
-
-        final double ksP;
-        if (nullBaf.length == 1) {
-            final EmpiricalDistribution d = new EmpiricalDistribution();
-            //d.load(carrierBaf);
-            //ksP = 1.0 - d.cumulativeProbability(nullBaf[0]);
-            return null;
-        } else if (carrierBaf.length == 1) {
-            final EmpiricalDistribution d = new EmpiricalDistribution();
-            //d.load(nullBaf);
-            //ksP = d.cumulativeProbability(carrierBaf[0]);
-            return null;
-        } else {
-            final TTest ttest = new TTest();
-            final double p = ttest.tTest(nullBaf, carrierBaf);
-            ksP = meanCarrier < meanNull ? p : 1. - p;
-            //final KolmogorovSmirnovTest ksTest = new KolmogorovSmirnovTest(); // TODO set random seed
-            //ksP = 0; //ksTest.kolmogorovSmirnovTest(nullBaf, carrierBaf, false);
-            //ksP = ksTest.approximateP(ksTest.kolmogorovSmirnovStatistic(nullBaf, carrierBaf), nullBaf.length, carrierBaf.length);
-        }
-
-        // Het count ratio stats (deletions)
-        final Median median = new Median();
-        final double[] nullRatiosArr = nullRatios.stream().mapToDouble(d -> d).toArray();
-        final double[] carrierRatiosArr = carrierSamples.stream().map(sampleStats::get).filter(s -> !s.isROH).mapToDouble(s -> s.deletionRatio).toArray();
-        final double medianCarrierRatio = median.evaluate(carrierRatiosArr);
-        final double medianBackgroundRatio = median.evaluate(nullRatiosArr);
-        final double medianBackgroundAbsoluteDeviation = median.evaluate(nullRatios.stream().mapToDouble(d -> Math.abs(medianBackgroundRatio - d)).toArray());
-        final double hetCountRatioZ = (medianCarrierRatio - medianBackgroundRatio) / Math.max(0.001, medianBackgroundAbsoluteDeviation);
-
-        print2(record, meanNull, meanCarrier, ksP, printStream);
-
-        return new TestResult(hetCountRatioZ, meanCarrier);
-
-         */
-
     }
 
     private Double calculateDuplicationTestStatistic(final List<BafEvidence> evidence, final Set<String> carrierSamples) {
-        final double[] nullBaf = evidence.stream().filter(baf -> !carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
-        final double[] carrierBaf = evidence.stream().filter(baf -> carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
-        if (nullBaf.length < 30 || carrierBaf.length < 30) {
+
+        final List<BafEvidence> frequencyFilteredEvidence = new ArrayList<>();
+        final Iterator<BafEvidence> iter = evidence.iterator();
+        final List<BafEvidence> buffer = new ArrayList<>();
+        int pos = -1;
+        while (iter.hasNext()) {
+            final BafEvidence baf = iter.next();
+            if (baf.getStart() != pos) {
+                if (buffer.size() >= 5) {
+                    frequencyFilteredEvidence.addAll(buffer);
+                }
+                buffer.clear();
+                pos = baf.getStart();
+            }
+            buffer.add(baf);
+        }
+        if (buffer.size() >= 5) {
+            frequencyFilteredEvidence.addAll(buffer);
+        }
+
+        final double[] nullBaf = frequencyFilteredEvidence.stream().filter(baf -> !carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
+        if (nullBaf.length == 0) {
+            return null;
+        }
+        final double[] carrierBaf = frequencyFilteredEvidence.stream().filter(baf -> carrierSamples.contains(baf.getSample())).mapToDouble(BafEvidence::getValue).map(d -> Math.min(d, 1.0 - d)).toArray();
+        if (carrierBaf.length == 0) {
             return null;
         }
         final double meanNull = median.evaluate(nullBaf);
@@ -146,25 +90,42 @@ public class BafEvidenceTester {
         return meanNull - meanCarrier;
     }
 
-    private Double calculateDeletionTestStatistic(final SVCallRecord record,
+    private Double calculateDeletionTestStatistic(final int length,
                                                   final Map<String, SampleStats> sampleStats,
-                                                  final Set<String> carrierSamples) {
-        final double length = record.getLength();
-        final double threshold = Math.min(50. / length, 0.0005);
-        int totalInnerCount = 0;
+                                                  final Set<String> carrierSamples,
+                                                  final int flankSize) {
+        final double threshold = 0.001; //Math.min(50. / length, 0.0005);
+        //int totalInnerCount = 0;
         final List<Double> nullRatios = new ArrayList<>();
+        final List<Double> carrierRatios = new ArrayList<>();
+
+        final BinomialDistribution binomialDistributionFlank = new BinomialDistribution(flankSize, threshold);
+        final BinomialDistribution binomialDistributionInner = new BinomialDistribution(length, threshold);
+
         for (final Map.Entry<String, SampleStats> entry : sampleStats.entrySet()) {
             final String sample = entry.getKey();
             final SampleStats stats = entry.getValue();
-            if (!isRegionOfHomozygosity(stats.beforeHetCount, stats.innerHetCount, stats.afterHetCount, length, threshold)) {
-                stats.deletionRatio = calculateDeletionRatio(stats.beforeHetCount, stats.innerHetCount, stats.afterHetCount, length, threshold);
-                if (!carrierSamples.contains(sample)) {
+            final double pFlank = binomialDistributionFlank.cumulativeProbability(Math.min(stats.beforeHetCount, stats.afterHetCount));
+            final double pInner = binomialDistributionInner.cumulativeProbability(stats.innerHetCount);
+            if (!(pInner < 0.05 && pFlank < 0.05)) {
+                stats.deletionRatio = Math.log(stats.innerHetCount + 1.);
+                if (carrierSamples.contains(sample)) {
+                    carrierRatios.add(stats.deletionRatio);
+                } else {
                     nullRatios.add(stats.deletionRatio);
                 }
             }
-            totalInnerCount += stats.innerHetCount;
+            //totalInnerCount += stats.innerHetCount;
         }
 
+        if (carrierRatios.isEmpty() || nullRatios.isEmpty()) {
+            return null;
+        }
+        final double medianCarrier = median.evaluate(carrierRatios.stream().mapToDouble(Double::doubleValue).toArray());
+        final double medianNull = median.evaluate(nullRatios.stream().mapToDouble(Double::doubleValue).toArray());
+        return medianCarrier - medianNull;
+
+        /*
         if (nullRatios.size() <= 10 || totalInnerCount < 10) {
             return null;
         }
@@ -178,10 +139,8 @@ public class BafEvidenceTester {
             return null;
         }
         final double[] carrierRatiosArr = carrierSamples.stream().map(sampleStats::get).filter(s -> s.deletionRatio != null).mapToDouble(s -> s.deletionRatio).toArray();
-        if (median.evaluate(carrierRatiosArr) < 0) {
-            int x = 0;
-        }
         return median.evaluate(carrierRatiosArr);
+         */
     }
 
     private static final class SampleStats {
@@ -191,29 +150,12 @@ public class BafEvidenceTester {
         public Double deletionRatio = null;
     }
 
-    public static final class TestResult {
-        private final Double delStat;
-        private final Double dupStat;
-        public TestResult(final Double delStat, final Double dupStat) {
-            this.delStat = delStat;
-            this.dupStat = dupStat;
-        }
-
-        public Double getDelStat() {
-            return delStat;
-        }
-
-        public Double getDupStat() {
-            return dupStat;
-        }
-    }
-
-    protected static boolean isRegionOfHomozygosity(final int beforeHetCount, final int innerHetCount, final int afterHetCount, final double length, final double threshold) {
+    protected boolean isRegionOfHomozygosity(final int beforeHetCount, final int innerHetCount, final int afterHetCount, final double length, final double threshold) {
         return innerHetCount < threshold * length &&
-            (beforeHetCount  < threshold * length || afterHetCount < threshold * length);
+                (beforeHetCount  < threshold * length || afterHetCount < threshold * length);
     }
 
-    protected static double calculateDeletionRatio(final int beforeHetCount, final int innerHetCount, final int afterHetCount, final double length, final double threshold) {
+    protected double calculateDeletionRatio(final int beforeHetCount, final int innerHetCount, final int afterHetCount, final double length, final double threshold) {
         final int flankHetCount = Math.min(beforeHetCount, afterHetCount);
         return Math.log10(innerHetCount + length * threshold) - Math.log10(flankHetCount + length * threshold);
     }

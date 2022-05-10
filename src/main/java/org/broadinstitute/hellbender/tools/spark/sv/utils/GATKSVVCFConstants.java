@@ -99,6 +99,9 @@ public final class GATKSVVCFConstants {
     public static final String START_SPLIT_READ_COUNT_ATTRIBUTE = "SR1";
     public static final String END_SPLIT_READ_COUNT_ATTRIBUTE = "SR2";
 
+    public static final String START_SPLIT_POSITION_ATTRIBUTE = "SR1POS";
+    public static final String END_SPLIT_POSITION_ATTRIBUTE = "SR2POS";
+
     // PESR aggregation
     public static final String START_SPLIT_QUALITY_ATTRIBUTE = "SR1Q";
     public static final String START_SPLIT_CARRIER_SIGNAL_ATTRIBUTE = "SR1CS";
@@ -109,7 +112,7 @@ public final class GATKSVVCFConstants {
     public static final String DISCORDANT_PAIR_COUNT_ATTRIBUTE = "PE";
     public static final String DISCORDANT_PAIR_QUALITY_ATTRIBUTE = "PEQ";
     public static final String DISCORDANT_PAIR_CARRIER_SIGNAL_ATTRIBUTE = "PECS";
-    public static final String BAF_QUALITY_ATTRIBUTE = "BAFQ";
+    public static final String BAF_STAT_ATTRIBUTE = "BAFSTAT";
 
     // filter block
     public static final String ASSEMBLY_BASED_VARIANT_MQ_FILTER_KEY = "LOW_MQ";
