@@ -51,6 +51,7 @@ public class BreakpointRefiner {
      * reads are to the left of the breakpoint and right-clipped reads to the right.
      */
     protected int maxInsertionSplitReadCrossDistance;
+    protected int representativeDepth;
 
     public static final int DEFAULT_MAX_INSERTION_CROSS_DISTANCE = 20;
     public static final byte MAX_SR_QUALITY = 99;
@@ -64,6 +65,7 @@ public class BreakpointRefiner {
         this.sampleCoverageMap = Utils.nonNull(sampleCoverageMap);
         this.dictionary = Utils.nonNull(dictionary);
         this.maxInsertionSplitReadCrossDistance = maxInsertionSplitReadCrossDistance;
+        this.representativeDepth = EvidenceStatUtils.computeRepresentativeDepth(sampleCoverageMap.values());
     }
 
     /**
@@ -124,10 +126,11 @@ public class BreakpointRefiner {
      * @param record with split read evidence
      * @return record with new breakpoints
      */
-    public SVCallRecord refineCall(final SVCallRecord record,
+    public RefineResult testRecord(final SVCallRecord record,
                                    final List<SplitReadEvidence> startEvidence,
                                    final List<SplitReadEvidence> endEvidence,
-                                   final Set<String> excludedSamples) {
+                                   final Set<String> excludedSamples,
+                                   final DiscordantPairEvidenceTester.DiscordantPairTestResult discordantPairResult) {
         Utils.nonNull(record);
         SVCallRecordUtils.validateCoordinatesWithDictionary(record, dictionary);
 
@@ -136,7 +139,6 @@ public class BreakpointRefiner {
         final Set<String> carrierSamples = record.getCarrierSampleSet();
         final Set<String> includedCarrierSamples = Sets.difference(carrierSamples, excludedSamples);
         final Set<String> includedBackgroundSamples = Sets.difference(includedSamples, includedCarrierSamples);
-        final int representativeDepth = EvidenceStatUtils.computeRepresentativeDepth(sampleCoverageMap.values());
 
         // Refine start
         final SplitReadSite refinedStartSite = refineSplitReadSite(startEvidence, includedCarrierSamples,
@@ -153,13 +155,31 @@ public class BreakpointRefiner {
         final EvidenceStatUtils.PoissonTestResult bothsideResult = calculateBothsideTest(refinedStartSite, refinedEndSite,
                 includedSamples, includedCarrierSamples, includedBackgroundSamples, sampleCoverageMap, representativeDepth);
 
+        EvidenceStatUtils.PoissonTestResult combinedResult = null;
+        if (discordantPairResult != null) {
+            combinedResult = calculatePESRTest(refinedStartSite, refinedEndSite,
+                    discordantPairResult, includedSamples, includedCarrierSamples, includedBackgroundSamples,
+                    sampleCoverageMap, representativeDepth);
+        }
+
+        return new RefineResult(refinedStartSite, refinedEndSite, bothsideResult, discordantPairResult, combinedResult);
+    }
+
+    public SVCallRecord applyToRecord(final SVCallRecord record,
+                                      final RefineResult result) {
+        Utils.nonNull(record);
+        Utils.nonNull(result);
+        final SplitReadSite refinedStartSite = result.getStart();
+        final SplitReadSite refinedEndSite = result.getEnd();
+        final EvidenceStatUtils.PoissonTestResult bothsideResult = result.getBothsidesResult();
+
         final int refinedStartPosition = refinedStartSite.getPosition();
         final int refinedEndPosition = refinedEndSite.getPosition();
         final Integer length = record.getType().equals(StructuralVariantType.INS) ? record.getLength() : null;
 
-        final Integer startQuality = refinedStartSite.getP() == null || Double.isNaN(refinedStartSite.getP()) ? null : EvidenceStatUtils.probToQual(refinedStartSite.getP(), MAX_SR_QUALITY);
-        final Integer endQuality = refinedEndSite.getP() == null || Double.isNaN(refinedEndSite.getP()) ? null : EvidenceStatUtils.probToQual(refinedEndSite.getP(), MAX_SR_QUALITY);
-        final Integer totalQuality = Double.isNaN(bothsideResult.getP()) ? null : EvidenceStatUtils.probToQual(bothsideResult.getP(), MAX_SR_QUALITY);
+        final Integer startQuality = refinedStartSite.getP() == null || Double.isNaN(refinedStartSite.getP()) ? null : EvidenceStatUtils.probToQual(refinedStartSite.getP(), (byte) 99);
+        final Integer endQuality = refinedEndSite.getP() == null || Double.isNaN(refinedEndSite.getP()) ? null : EvidenceStatUtils.probToQual(refinedEndSite.getP(), (byte) 99);
+        final Integer totalQuality = Double.isNaN(bothsideResult.getP()) ? null : EvidenceStatUtils.probToQual(bothsideResult.getP(), (byte) 99);
         final Map<String, Object> refinedAttr = new HashMap<>(record.getAttributes());
         refinedAttr.put(GATKSVVCFConstants.START_SPLIT_QUALITY_ATTRIBUTE, startQuality);
         refinedAttr.put(GATKSVVCFConstants.END_SPLIT_QUALITY_ATTRIBUTE, endQuality);
@@ -198,6 +218,16 @@ public class BreakpointRefiner {
             newGenotypes.add(genotypeBuilder.make());
         }
 
+        if (result.getPesrResult() != null) {
+            final EvidenceStatUtils.PoissonTestResult discordantPairTest = result.getDiscordantPairTestResult().getTest();
+            final Integer combinedCarrierSignal = EvidenceStatUtils.carrierSignalFraction(
+                    discordantPairTest.getCarrierSignal() + bothsideResult.getCarrierSignal(),
+                    discordantPairTest.getBackgroundSignal() + bothsideResult.getBackgroundSignal());
+            refinedAttr.put(GATKSVVCFConstants.PESR_CARRIER_SIGNAL_ATTRIBUTE, combinedCarrierSignal);
+            final Integer pesrQuality = Double.isNaN(result.getPesrResult().getP()) ? null : EvidenceStatUtils.probToQual(result.getPesrResult().getP(), (byte) 99);
+            refinedAttr.put(GATKSVVCFConstants.PESR_QUALITY_ATTRIBUTE, pesrQuality);
+        }
+
         // Create new record
         return new SVCallRecord(record.getId(), record.getContigA(), newStartPosition,
                 record.getStrandA(), record.getContigB(), newEndPosition, record.getStrandB(), record.getType(),
@@ -217,6 +247,23 @@ public class BreakpointRefiner {
         }
         return EvidenceStatUtils.calculateOneSamplePoissonTest(sampleCountSums,
                carrierSamples, backgroundSamples, sampleCoverageMap, representativeDepth);
+    }
+
+    private static EvidenceStatUtils.PoissonTestResult calculatePESRTest(final SplitReadSite startSite,
+                                                                         final SplitReadSite endSite,
+                                                                         final DiscordantPairEvidenceTester.DiscordantPairTestResult discordantPairTestResult,
+                                                                         final Set<String> calledSamples,
+                                                                         final Collection<String> carrierSamples,
+                                                                         final Collection<String> backgroundSamples,
+                                                                         final Map<String, Double> sampleCoverageMap,
+                                                                         final double representativeDepth) {
+        final Map<String, Integer> sampleCountSums = new HashMap<>(SVUtils.hashMapCapacity(calledSamples.size()));
+        final Map<String, Integer> discordantPairCounts = discordantPairTestResult.getSampleCounts();
+        for (final String sample : calledSamples) {
+            sampleCountSums.put(sample, startSite.getCount(sample) + endSite.getCount(sample) + discordantPairCounts.getOrDefault(sample, 0));
+        }
+        return EvidenceStatUtils.calculateOneSamplePoissonTest(sampleCountSums,
+                carrierSamples, backgroundSamples, sampleCoverageMap, representativeDepth);
     }
 
     /**
@@ -247,5 +294,44 @@ public class BreakpointRefiner {
             return refinedStartPosition - maxInsertionSplitReadCrossDistance;
         }
         return refinedStartPosition + 1;
+    }
+
+    public final class RefineResult {
+        private final SplitReadSite start;
+        private final SplitReadSite end;
+        private final EvidenceStatUtils.PoissonTestResult bothsidesResult;
+        private final DiscordantPairEvidenceTester.DiscordantPairTestResult discordantPairTestResult;
+        private final EvidenceStatUtils.PoissonTestResult pesrResult;
+
+        public RefineResult(final SplitReadSite start, final SplitReadSite end,
+                            final EvidenceStatUtils.PoissonTestResult bothsidesResult,
+                            final DiscordantPairEvidenceTester.DiscordantPairTestResult discordantPairTestResult,
+                            final EvidenceStatUtils.PoissonTestResult pesrResult) {
+            this.start = start;
+            this.end = end;
+            this.bothsidesResult = bothsidesResult;
+            this.discordantPairTestResult = discordantPairTestResult;
+            this.pesrResult = pesrResult;
+        }
+
+        public SplitReadSite getStart() {
+            return start;
+        }
+
+        public SplitReadSite getEnd() {
+            return end;
+        }
+
+        public EvidenceStatUtils.PoissonTestResult getBothsidesResult() {
+            return bothsidesResult;
+        }
+
+        public EvidenceStatUtils.PoissonTestResult getPesrResult() {
+            return pesrResult;
+        }
+
+        public DiscordantPairEvidenceTester.DiscordantPairTestResult getDiscordantPairTestResult() {
+            return discordantPairTestResult;
+        }
     }
 }

@@ -366,7 +366,7 @@ public class BreakpointRefinerTest extends GATKBaseTest {
         sampleCoverageMap.put("sample2", 25.);
 
         final SVCallRecord test = new BreakpointRefiner(sampleCoverageMap, 20, DICTIONARY)
-                .refineCall(record, startEvidence, endEvidence, excludedSamples);
+                .testRecord(record, startEvidence, endEvidence, excludedSamples);
         Assert.assertEquals(test.getId(), "call1");
         Assert.assertEquals(test.getPositionA(), expectedPositionA);
         Assert.assertEquals(test.getPositionB(), expectedPositionB);
@@ -413,7 +413,7 @@ public class BreakpointRefinerTest extends GATKBaseTest {
         );
 
         final SVCallRecord test = new BreakpointRefiner(sampleCoverageMap, 20, DICTIONARY)
-                .refineCall(record, startEvidence, endEvidence, Collections.emptySet());
+                .testRecord(record, startEvidence, endEvidence, Collections.emptySet());
         Assert.assertEquals(test.getId(), "call1");
         Assert.assertEquals(test.getPositionA(), 995);
         Assert.assertEquals(test.getPositionB(), 995 - BreakpointRefiner.DEFAULT_MAX_INSERTION_CROSS_DISTANCE);
@@ -449,7 +449,7 @@ public class BreakpointRefinerTest extends GATKBaseTest {
         );
 
         final SVCallRecord test = new BreakpointRefiner(sampleCoverageMap, 20, DICTIONARY)
-                .refineCall(record, startEvidence, endEvidence, Collections.emptySet());
+                .testRecord(record, startEvidence, endEvidence, Collections.emptySet());
         Assert.assertEquals(test.getId(), "call1");
         Assert.assertEquals(test.getContigA(), "chr21");
         Assert.assertEquals(test.getPositionA(), 1000);

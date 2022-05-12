@@ -2,8 +2,7 @@ package org.broadinstitute.hellbender.tools.walkers.sv;
 
 import com.google.common.collect.Sets;
 import htsjdk.samtools.SAMSequenceDictionary;
-import htsjdk.variant.variantcontext.StructuralVariantType;
-import htsjdk.variant.variantcontext.VariantContext;
+import htsjdk.variant.variantcontext.*;
 import htsjdk.variant.variantcontext.writer.VariantContextWriter;
 import htsjdk.variant.vcf.*;
 import org.apache.commons.io.IOUtils;
@@ -441,27 +440,19 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
         if (bafCollectionEnabled() && useBafEvidence(record)) {
             final List<BafEvidence> bafEvidence = bafCollector.collectEvidence(record);
             final Double result = bafEvidenceTester.calculateLogLikelihood(record, bafEvidence, excludedSamples, (int) bafPaddingFraction * record.getLength());
-            final Map<String, Object> attributes = new HashMap<>();
-            attributes.put(GATKSVVCFConstants.BAF_STAT_ATTRIBUTE, result);
-            record = SVCallRecordUtils.copyCallWithNewAttributes(record, attributes);
+            record = bafEvidenceTester.applyToRecord(record, result);
         }
+        DiscordantPairEvidenceTester.DiscordantPairTestResult discordantPairResult = null;
         if (discordantPairCollectionEnabled() && useDiscordantPairEvidence(record)) {
             final List<DiscordantPairEvidence> discordantPairEvidence = discordantPairCollector.collectEvidence(record);
-            final EvidenceStatUtils.PoissonTestResult result = discordantPairEvidenceTester.poissonTestRecord(record, discordantPairEvidence, excludedSamples);
-            final double p = result == null ? 1. : result.getP();
-            final Integer q = EvidenceStatUtils.probToQual(p, (byte) 99);
-            final Integer carrierSignal = result == null ? 0 :
-                    EvidenceStatUtils.carrierSignalFraction(result.getCarrierSignal(), result.getBackgroundSignal());
-            final Map<String, Object> attributes = new HashMap<>();
-            attributes.put(GATKSVVCFConstants.DISCORDANT_PAIR_QUALITY_ATTRIBUTE, q);
-            attributes.put(GATKSVVCFConstants.DISCORDANT_PAIR_CARRIER_SIGNAL_ATTRIBUTE, carrierSignal);
-            record = SVCallRecordUtils.copyCallWithNewAttributes(record, attributes);
-            record = SVCallRecordUtils.assignDiscordantPairCountsToGenotypes(record, discordantPairEvidence);
+            discordantPairResult = discordantPairEvidenceTester.poissonTestRecord(record, discordantPairEvidence, excludedSamples);
+            record = discordantPairEvidenceTester.applyToRecord(record, discordantPairResult);
         }
         if (splitReadCollectionEnabled() && useSplitReadEvidence(record)) {
             final List<SplitReadEvidence> startSplitReadEvidence = startSplitCollector.collectEvidence(record);
             final List<SplitReadEvidence> endSplitReadEvidence = endSplitCollector.collectEvidence(record);
-            record = breakpointRefiner.refineCall(record, startSplitReadEvidence, endSplitReadEvidence, excludedSamples);
+            final BreakpointRefiner.RefineResult result = breakpointRefiner.testRecord(record, startSplitReadEvidence, endSplitReadEvidence, excludedSamples, discordantPairResult);
+            record = breakpointRefiner.applyToRecord(record, result);
         }
         outputBuffer.add(SVCallRecordUtils.getVariantBuilder(record).make());
     }
@@ -493,6 +484,15 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
         for (final VCFHeaderLine line : getHeaderForVariants().getMetaDataInInputOrder()) {
             header.addMetaDataLine(line);
         }
+        if (bafCollectionEnabled()) {
+            header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.BAF_STAT_DEL_ATTRIBUTE, 1, VCFHeaderLineType.Float, "B-allele frequency statistic for deletions"));
+            header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.BAF_STAT_DUP_ATTRIBUTE, 1, VCFHeaderLineType.Float, "B-allele frequency statistic for duplications"));
+        }
+        if (discordantPairCollectionEnabled()) {
+            header.addMetaDataLine(new VCFFormatHeaderLine(GATKSVVCFConstants.DISCORDANT_PAIR_COUNT_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Discordant pair count"));
+            header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.DISCORDANT_PAIR_QUALITY_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Discordant pair quality"));
+            header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.DISCORDANT_PAIR_CARRIER_SIGNAL_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Carrier sample discordant pair signal"));
+        }
         if (splitReadCollectionEnabled()) {
             header.addMetaDataLine(new VCFFormatHeaderLine(GATKSVVCFConstants.START_SPLIT_READ_COUNT_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Split read count at start"));
             header.addMetaDataLine(new VCFFormatHeaderLine(GATKSVVCFConstants.END_SPLIT_READ_COUNT_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Split read count at end"));
@@ -504,14 +504,10 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
             header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.TOTAL_SPLIT_CARRIER_SIGNAL_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Carrier sample split read signal for both ends"));
             header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.START_SPLIT_POSITION_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Split read position at start"));
             header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.END_SPLIT_POSITION_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Split read position at end"));
-        }
-        if (discordantPairCollectionEnabled()) {
-            header.addMetaDataLine(new VCFFormatHeaderLine(GATKSVVCFConstants.DISCORDANT_PAIR_COUNT_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Discordant pair count"));
-            header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.DISCORDANT_PAIR_QUALITY_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Discordant pair quality"));
-            header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.DISCORDANT_PAIR_CARRIER_SIGNAL_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Carrier sample discordant pair signal"));
-        }
-        if (bafCollectionEnabled()) {
-            header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.BAF_STAT_ATTRIBUTE, 1, VCFHeaderLineType.Float, "B-allele frequency statistic"));
+            if (discordantPairCollectionEnabled()) {
+                header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.PESR_QUALITY_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Combined PE/SR quality"));
+                header.addMetaDataLine(new VCFInfoHeaderLine(GATKSVVCFConstants.PESR_CARRIER_SIGNAL_ATTRIBUTE, 1, VCFHeaderLineType.Integer, "Combined PE/SR carrier signal"));
+            }
         }
         return header;
     }

@@ -5,8 +5,11 @@ import htsjdk.variant.variantcontext.StructuralVariantType;
 import org.apache.commons.math3.distribution.BinomialDistribution;
 import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.commons.math3.stat.descriptive.rank.Median;
+import org.broadinstitute.hellbender.tools.spark.sv.utils.GATKSVVCFConstants;
 import org.broadinstitute.hellbender.tools.sv.BafEvidence;
 import org.broadinstitute.hellbender.tools.sv.SVCallRecord;
+import org.broadinstitute.hellbender.tools.sv.SVCallRecordUtils;
+import org.broadinstitute.hellbender.utils.Utils;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -54,6 +57,20 @@ public class BafEvidenceTester {
         } else {
             return calculateDuplicationTestStatistic(innerBaf, carrierSamples);
         }
+    }
+
+    public SVCallRecord applyToRecord(final SVCallRecord record, final Double result) {
+        Utils.nonNull(record);
+        if (result == null) {
+            return record;
+        }
+        final Map<String, Object> attributes = new HashMap<>();
+        if (record.getType() == StructuralVariantType.DEL) {
+            attributes.put(GATKSVVCFConstants.BAF_STAT_DEL_ATTRIBUTE, result);
+        } else {
+            attributes.put(GATKSVVCFConstants.BAF_STAT_DUP_ATTRIBUTE, result);
+        }
+        return SVCallRecordUtils.copyCallWithNewAttributes(record, attributes);
     }
 
     private Double calculateDuplicationTestStatistic(final List<BafEvidence> evidence, final Set<String> carrierSamples) {
