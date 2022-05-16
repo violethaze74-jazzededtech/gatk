@@ -591,7 +591,7 @@ public class CollectSVEvidence extends ReadWalker {
             final FeatureDataSource<VariantContext> snpSource =
                     new FeatureDataSource<>(inputPath.toPath().toString());
             dict.assertSameDictionary(snpSource.getSequenceDictionary());
-            this.snpSourceItr = snpSource.iterator();
+            this.snpSourceItr = new BAFSiteIterator(snpSource.iterator());
             this.locusDepthQueue = new ArrayDeque<>(100);
             readNextLocus();
         }
@@ -694,16 +694,45 @@ public class CollectSVEvidence extends ReadWalker {
             if ( !snpSourceItr.hasNext() ) {
                 return false;
             }
-            VariantContext snp = snpSourceItr.next();
-            while ( !snp.isSNP() || !snp.isBiallelic() ) {
-                if ( !snpSourceItr.hasNext() ) {
-                    return false;
-                }
-                snp = snpSourceItr.next();
-            }
-            final LocusDepth locusDepth = new LocusDepth(snp, sampleName);
+            final LocusDepth locusDepth = new LocusDepth(snpSourceItr.next(), sampleName);
             locusDepthQueue.add(locusDepth);
             return true;
+        }
+    }
+
+    public final static class BAFSiteIterator implements Iterator<VariantContext> {
+        final Iterator<VariantContext> vcIterator;
+        VariantContext last;
+        VariantContext next;
+
+        public BAFSiteIterator( final Iterator<VariantContext> vcIterator ) {
+            this.vcIterator = vcIterator;
+            hasNext();
+        }
+        public boolean hasNext() {
+            if ( next != null ) {
+                return true;
+            }
+            while ( vcIterator.hasNext() ) {
+                final VariantContext vc = vcIterator.next();
+                if ( vc.isSNP() && vc.isBiallelic() &&
+                        (last == null || !last.getContig().equals(vc.getContig()) ||
+                                last.getStart() < vc.getStart()) ) {
+                    next = vc;
+                    break;
+                }
+            }
+            return next != null;
+        }
+
+        public VariantContext next() {
+            if ( !hasNext() ) {
+                throw new NoSuchElementException("baf sites iterator is exhausted");
+            }
+            final VariantContext result = next;
+            last = next;
+            next = null;
+            return result;
         }
     }
 }

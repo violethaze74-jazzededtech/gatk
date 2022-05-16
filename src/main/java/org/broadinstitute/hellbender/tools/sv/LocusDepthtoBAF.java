@@ -14,6 +14,7 @@ import org.broadinstitute.hellbender.cmdline.StandardArgumentDefinitions;
 import org.broadinstitute.hellbender.cmdline.programgroups.StructuralVariantDiscoveryProgramGroup;
 import org.broadinstitute.hellbender.engine.*;
 import org.broadinstitute.hellbender.exceptions.UserException;
+import org.broadinstitute.hellbender.tools.walkers.sv.CollectSVEvidence;
 import org.broadinstitute.hellbender.utils.MathUtils.RunningAverage;
 import org.broadinstitute.hellbender.utils.Nucleotide;
 import org.broadinstitute.hellbender.utils.codecs.FeatureOutputCodec;
@@ -129,7 +130,7 @@ public class LocusDepthtoBAF extends MultiFeatureWalker<LocusDepth> {
     public void onTraversalStart() {
         super.onTraversalStart();
         bafSitesSource = new FeatureDataSource<>(bafSitesFile.toPath().toString());
-        bafSitesIterator = bafSitesSource.iterator();
+        bafSitesIterator = new CollectSVEvidence.BAFSiteIterator(bafSitesSource.iterator());
         final SAMSequenceDictionary dict = getDictionary();
         dict.assertSameDictionary(bafSitesSource.getSequenceDictionary());
         final FeatureOutputCodec<? extends Feature, ? extends FeatureSink<? extends Feature>> codec =
@@ -164,25 +165,26 @@ public class LocusDepthtoBAF extends MultiFeatureWalker<LocusDepth> {
     }
 
     /** Performs a Pearson's chi square test for goodness of fit to a biallelic model to determine
-     * heterozygosity.  If this fails, BafEvidence.MISSING_VALUE is returned.  If the test succeeds,
-     * the depth of the alt call as a fraction of the total depth is returned.
+     * heterozygosity.  If this fails, null is returned.  If the test succeeds,
+     * the depth of the alt call as a fraction of the total depth is returned as BafEvidence.
      */
-    @VisibleForTesting double calcBAF( final LocusDepth locusDepth,
-                                       final int refIndex, final int altIndex ) {
-        final int totalDepth = locusDepth.getTotalDepth();
+    @VisibleForTesting BafEvidence calcBAF( final LocusDepth ld,
+                                            final int refIndex,
+                                            final int altIndex ) {
+        final int totalDepth = ld.getTotalDepth();
         if ( totalDepth < minTotalDepth ) {
-            return BafEvidence.MISSING_VALUE;
+            return null;
         }
         final double expectRefAlt = totalDepth / 2.;
-        final double altDepth = locusDepth.getDepth(altIndex);
-        final double refDiff = locusDepth.getDepth(refIndex) - expectRefAlt;
+        final double altDepth = ld.getDepth(altIndex);
+        final double refDiff = ld.getDepth(refIndex) - expectRefAlt;
         final double altDiff = altDepth - expectRefAlt;
         final double chiSq = (refDiff * refDiff + altDiff * altDiff) / expectRefAlt;
         final double fitProb = 1. - chiSqDist.cumulativeProbability(chiSq);
         if ( fitProb < minHetProbability ) {
-            return BafEvidence.MISSING_VALUE;
+            return null;
         }
-        return altDepth / totalDepth;
+        return new BafEvidence(ld.getSample(), ld.getContig(), ld.getStart(), altDepth / totalDepth);
     }
 
     private boolean sameLocus( final Locatable locus ) {
@@ -190,8 +192,8 @@ public class LocusDepthtoBAF extends MultiFeatureWalker<LocusDepth> {
             return true;
         }
         final LocusDepth curLocus = sameLocusBuffer.get(0);
-        return curLocus.getContig().equals(locus.getContig()) &&
-                curLocus.getStart() == locus.getStart();
+        return curLocus.getStart() == locus.getStart() &&
+                curLocus.getContig().equals(locus.getContig());
     }
 
     private void processBuffer() {
@@ -212,45 +214,44 @@ public class LocusDepthtoBAF extends MultiFeatureWalker<LocusDepth> {
         }
         final List<BafEvidence> beList = new ArrayList<>(sameLocusBuffer.size());
         for ( final LocusDepth ld : sameLocusBuffer ) {
-            final double baf = calcBAF(ld, refIndex, altIndex);
-            if ( baf != BafEvidence.MISSING_VALUE ) {
-                beList.add(new BafEvidence(ld.getSample(), ld.getContig(), ld.getStart(), baf));
-            }
-        }
-        final int nBafs = beList.size();
-        if ( nBafs == 1 ) {
-            writer.write(new BafEvidence(beList.get(0), .5));
-        } else {
-            final RunningAverage ra = new RunningAverage();
-            for ( final BafEvidence bafEvidence : beList ) {
-                ra.add(bafEvidence.getValue());
-            }
-            final double stddev = ra.stddev();
-            if ( stddev <= maxStdDev ) {
-                final double[] vals = new double[nBafs];
-                for ( int idx = 0; idx != nBafs; ++idx ) {
-                    vals[idx] = beList.get(idx).getValue();
-                }
-                Arrays.sort(vals);
-                final int midIdx = nBafs / 2;
-                final double median =
-                        (nBafs & 1) != 0 ? vals[midIdx] : (vals[midIdx] + vals[midIdx - 1])/2.;
-                final double adj = .5 - median;
-                for ( final BafEvidence bafEvidence : beList ) {
-                    writer.write(new BafEvidence(bafEvidence, bafEvidence.getValue()+adj));
-                }
+            final BafEvidence bafEvidence = calcBAF(ld, refIndex, altIndex);
+            if ( bafEvidence != null ) {
+                beList.add(bafEvidence);
             }
         }
         sameLocusBuffer.clear();
+        final int nBafs = beList.size();
+        if ( nBafs <= 1 ) {
+            if ( nBafs == 1 ) {
+                writer.write(new BafEvidence(beList.get(0), .5));
+            }
+            return;
+        }
+        final RunningAverage ra = new RunningAverage();
+        for ( final BafEvidence bafEvidence : beList ) {
+            ra.add(bafEvidence.getValue());
+        }
+        final double stddev = ra.stddev();
+        if ( stddev <= maxStdDev ) {
+            final double[] vals = new double[nBafs];
+            for ( int idx = 0; idx != nBafs; ++idx ) {
+                vals[idx] = beList.get(idx).getValue();
+            }
+            Arrays.sort(vals);
+            final int midIdx = nBafs / 2;
+            final double median =
+                    (nBafs & 1) != 0 ? vals[midIdx] : (vals[midIdx] + vals[midIdx - 1])/2.;
+            final double adj = .5 - median;
+            for ( final BafEvidence bafEvidence : beList ) {
+                writer.write(new BafEvidence(bafEvidence, bafEvidence.getValue()+adj));
+            }
+        }
     }
 
     private VariantContext nextSite() {
-        while ( bafSitesIterator.hasNext() ) {
-            final VariantContext vc = bafSitesIterator.next();
-            if ( vc.isSNP() && vc.isBiallelic() ) {
-                return vc;
-            }
+        if ( !bafSitesIterator.hasNext() ) {
+            throw new UserException("baf sites vcf exhausted before locus depth data");
         }
-        throw new UserException("baf sites vcf exhausted before locus depth data");
+        return bafSitesIterator.next();
     }
 }
