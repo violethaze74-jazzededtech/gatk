@@ -5,7 +5,6 @@ workflow GvsValidateVat {
         String query_project_id
         String default_dataset
         String vat_table_name
-        String? service_account_json_path
     }
 
     String fq_vat_table = "~{query_project_id}.~{default_dataset}.~{vat_table_name}"
@@ -13,15 +12,13 @@ workflow GvsValidateVat {
     call GetBQTableLastModifiedDatetime {
         input:
             query_project = query_project_id,
-            fq_table = fq_vat_table,
-            service_account_json_path = service_account_json_path
+            fq_table = fq_vat_table
     }
 
     call EnsureVatTableHasVariants {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -29,7 +26,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -37,7 +33,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -45,7 +40,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -53,7 +47,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -61,7 +54,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -69,7 +61,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -77,7 +68,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -85,7 +75,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -93,7 +82,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -101,7 +89,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -109,7 +96,6 @@ workflow GvsValidateVat {
         input:
             query_project_id = query_project_id,
             fq_vat_table = fq_vat_table,
-            service_account_json_path = service_account_json_path,
             last_modified_timestamp = GetBQTableLastModifiedDatetime.last_modified_timestamp
     }
 
@@ -140,22 +126,14 @@ task GetBQTableLastModifiedDatetime {
     input {
         String query_project
         String fq_table
-        String? service_account_json_path
     }
 
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
 
     # ------------------------------------------------
     # try to get the last modified date for the table in question; fail if something comes back from BigQuery
     # that isn't in the right format (e.g. an error)
     command <<<
         set -e
-
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project}
-        fi
 
         echo "project_id = ~{query_project}" > ~/.bigqueryrc
 
@@ -188,19 +166,11 @@ task EnsureVatTableHasVariants {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
 
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
-
     command <<<
         set -e
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         bq query --nouse_legacy_sql --project_id=~{query_project_id} --format=csv 'SELECT COUNT (DISTINCT vid) AS count FROM ~{fq_vat_table}' > bq_variant_count.csv
@@ -240,20 +210,12 @@ task SpotCheckForExpectedTranscripts {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
-
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
 
     command <<<
         set -e
 
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         bq query --nouse_legacy_sql --project_id=~{query_project_id} --format=csv 'SELECT
@@ -305,19 +267,11 @@ task SchemaNoNullRequiredFields {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
     # No non-nullable fields contain null values
 
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
-
     command <<<
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         # non-nullable fields: vid, contig, position, ref_allele, alt_allele, gvs_all_ac, gvs_all_an, gvs_all_af, variant_type, genomic_location
@@ -385,20 +339,12 @@ task SchemaOnlyOneRowPerNullTranscript {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
-
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
 
     command <<<
         set -e
 
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         bq query --nouse_legacy_sql --project_id=~{query_project_id} --format=csv 'SELECT
@@ -444,19 +390,11 @@ task SchemaPrimaryKey {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
     # Each key combination (vid+transcript) is unique--confirms that primary key is enforced.
 
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
-
     command <<<
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         bq query --nouse_legacy_sql --project_id=~{query_project_id} --format=csv
@@ -501,19 +439,11 @@ task SchemaEnsemblTranscripts {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
     # Every transcript_source is Ensembl or null
 
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
-
     command <<<
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         bq query --nouse_legacy_sql --project_id=~{query_project_id} --format=csv 'SELECT
@@ -559,19 +489,11 @@ task SchemaNonzeroAcAn {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
     # No row has AC of zero or AN of zero.
 
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
-
     command <<<
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         bq query --nouse_legacy_sql --project_id=~{query_project_id} --format=csv 'SELECT
@@ -620,20 +542,12 @@ task SchemaNullTranscriptsExist {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
-
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
 
     command <<<
         set -e
 
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         bq query --nouse_legacy_sql --project_id=~{query_project_id} --format=csv 'SELECT
@@ -674,20 +588,13 @@ task SubpopulationMax {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
     # gvs_max_af is actually the max
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
 
     command <<<
         set -e
 
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         # gvs subpopulations:  [ "afr", "amr", "eas", "eur", "mid", "oth", "sas"]
@@ -735,20 +642,13 @@ task SubpopulationAlleleCount {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
     # sum of subpop ACs equal the gvs_all ACs
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
 
     command <<<
         set -e
 
-        if [ ~{has_service_account_file} = 'true' ]; then
-            gsutil cp ~{service_account_json_path} local.service_account.json
-            gcloud auth activate-service-account --key-file=local.service_account.json
-            gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         # gvs subpopulations:  [ "afr", "amr", "eas", "eur", "mid", "oth", "sas"]
@@ -790,20 +690,13 @@ task SubpopulationAlleleNumber {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
     # sum of subpop ACs equal the gvs_all ACs
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
 
     command <<<
         set -e
 
-        if [ ~{has_service_account_file} = 'true' ]; then
-          gsutil cp ~{service_account_json_path} local.service_account.json
-          gcloud auth activate-service-account --key-file=local.service_account.json
-          gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         # gvs subpopulations:  [ "afr", "amr", "eas", "eur", "mid", "oth", "sas"]
@@ -845,20 +738,13 @@ task ClinvarSignificance {
     input {
         String query_project_id
         String fq_vat_table
-        String? service_account_json_path
         String last_modified_timestamp
     }
     # check that all clinvar values are accounted for
-    String has_service_account_file = if (defined(service_account_json_path)) then 'true' else 'false'
 
     command <<<
         set -e
 
-        if [ ~{has_service_account_file} = 'true' ]; then
-          gsutil cp ~{service_account_json_path} local.service_account.json
-          gcloud auth activate-service-account --key-file=local.service_account.json
-          gcloud config set project ~{query_project_id}
-        fi
         echo "project_id = ~{query_project_id}" > ~/.bigqueryrc
 
         # clinvar significance values:  ["benign",
