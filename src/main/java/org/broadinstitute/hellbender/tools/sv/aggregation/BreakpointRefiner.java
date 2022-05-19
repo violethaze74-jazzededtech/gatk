@@ -53,7 +53,7 @@ public class BreakpointRefiner {
     protected int maxInsertionSplitReadCrossDistance;
     protected int representativeDepth;
 
-    public static final int DEFAULT_MAX_INSERTION_CROSS_DISTANCE = 20;
+    public static final int DEFAULT_MAX_INSERTION_CROSS_DISTANCE = 200;
     public static final byte MAX_SR_QUALITY = 99;
 
     /**
@@ -201,8 +201,8 @@ public class BreakpointRefiner {
             // For insertions, keep track of split read positions but use average as a nominal start
             newStartPosition = (int) (0.5 * (refinedStartPosition + refinedEndPosition));
             newEndPosition = newStartPosition;
-            refinedAttr.put(GATKSVVCFConstants.START_SPLIT_POSITION_ATTRIBUTE, refinedStartSite);
-            refinedAttr.put(GATKSVVCFConstants.END_SPLIT_POSITION_ATTRIBUTE, refinedEndSite);
+            refinedAttr.put(GATKSVVCFConstants.START_SPLIT_POSITION_ATTRIBUTE, refinedStartSite.getPosition());
+            refinedAttr.put(GATKSVVCFConstants.END_SPLIT_POSITION_ATTRIBUTE, refinedEndSite.getPosition());
         } else {
             newStartPosition = refinedStartPosition;
             newEndPosition = refinedEndPosition;

@@ -45,6 +45,9 @@ import java.util.stream.Collectors;
  *         SR evidence file
  *     </li>
  *     <li>
+ *         BAF evidence file
+ *     </li>
+ *     <li>
  *         Mean depth table
  *     </li>
  * </ul>
@@ -372,7 +375,8 @@ public final class AggregatePairedEndAndSplitReadEvidence extends TwoPassVariant
 
     private boolean useBafEvidence(final SVCallRecord call) {
         final Integer length = call.getLength();
-        return call.isSimpleCNV() && length != null && length >= bafMinSize && length <= bafMaxSize;
+        return (call.getType() == StructuralVariantType.DEL || call.getType() == StructuralVariantType.DUP)
+                && length != null && length >= bafMinSize && length <= bafMaxSize;
     }
 
     @Override
