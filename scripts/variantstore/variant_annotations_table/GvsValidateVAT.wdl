@@ -135,11 +135,11 @@ task GetBQTableLastModifiedDatetime {
     command <<<
         set -e
 
-        gcloud config set project "spec-ops-aou"
+        gcloud config set project ~{query_project}
 
-        echo "project_id = spec-ops-aou" > ~/.bigqueryrc
+        echo "project_id = ~{query_project}" > ~/.bigqueryrc
 
-        bq query --nouse_legacy_sql --project_id=spec-ops-aou --format=csv 'SELECT COUNT (DISTINCT vid) AS count FROM ~{fq_table}'
+        bq query --nouse_legacy_sql --project_id=~{query_project} --format=csv 'SELECT COUNT (DISTINCT vid) AS count FROM ~{fq_table}'
 
         # bq needs the project name to be separate by a colon
         DATASET_TABLE_COLON=$(echo ~{fq_table} | sed 's/\./:/')
