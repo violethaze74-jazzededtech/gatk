@@ -135,6 +135,8 @@ task GetBQTableLastModifiedDatetime {
     command <<<
         set -e
 
+        gcloud config set project ~{query_project}
+
         echo "project_id = ~{query_project}" > ~/.bigqueryrc
 
         # bq needs the project name to be separate by a colon
