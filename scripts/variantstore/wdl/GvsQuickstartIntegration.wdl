@@ -1,13 +1,13 @@
 version 1.0
 
-import "GvsUnified.wdl" as GvsUnified
-import "GvsUtils.wdl" as GvsUtils
+import "GvsUnified.wdl" as Unified
+import "GvsUtils.wdl" as Utils
 
 workflow GvsQuickstartIntegration {
 
     input {
         String branch_name
-        String expected_output_prefix = "gs://broad-dsp-spec-ops/quickstart_integration/2022-04-25/"
+        String expected_output_prefix = "gs://broad-dsp-spec-ops/quickstart_integration/2022-06-03/"
 
         Array[String] external_sample_names = [
                                               "ERS4367795",
@@ -49,13 +49,13 @@ workflow GvsQuickstartIntegration {
                                         ]
     }
 
-    call GvsUtils.BuildGATKJarAndCreateDataset {
+    call Utils.BuildGATKJarAndCreateDataset {
         input:
             branch_name = branch_name,
             dataset_prefix = "quickit"
     }
 
-    call GvsUnified.GvsUnified {
+    call Unified.GvsUnified {
         input:
             dataset_name = BuildGATKJarAndCreateDataset.dataset_name,
             project_id = "spec-ops-aou",
@@ -94,6 +94,11 @@ task AssertIdenticalOutputs {
     }
 
     command <<<
+        set -o errexit
+        set -o nounset
+        set -o pipefail
+        set -o xtrace
+
         failures=()
 
         # Where the current set of expected results lives in the cloud
