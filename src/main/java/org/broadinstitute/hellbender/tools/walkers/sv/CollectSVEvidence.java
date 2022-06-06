@@ -15,7 +15,7 @@ import org.broadinstitute.hellbender.engine.filters.ReadFilter;
 import org.broadinstitute.hellbender.engine.filters.ReadFilterLibrary;
 import org.broadinstitute.hellbender.exceptions.UserException;
 import org.broadinstitute.hellbender.tools.sv.DiscordantPairEvidence;
-import org.broadinstitute.hellbender.tools.sv.LocusDepth;
+import org.broadinstitute.hellbender.tools.sv.SiteDepth;
 import org.broadinstitute.hellbender.tools.sv.SplitReadEvidence;
 import org.broadinstitute.hellbender.utils.Nucleotide;
 import org.broadinstitute.hellbender.utils.SimpleInterval;
@@ -557,11 +557,11 @@ public class CollectSVEvidence extends ReadWalker {
     final static class AlleleCounter {
         private final SAMSequenceDictionary dict;
         private final String sampleName;
-        private final FeatureSink<LocusDepth> writer;
+        private final FeatureSink<SiteDepth> writer;
         private final int minMapQ;
         private final int minQ;
         private final Iterator<VariantContext> snpSourceItr;
-        private final Deque<LocusDepth> locusDepthQueue;
+        private final Deque<SiteDepth> siteDepthQueue;
 
         public AlleleCounter( final SAMSequenceDictionary dict,
                               final String sampleName,
@@ -573,12 +573,12 @@ public class CollectSVEvidence extends ReadWalker {
             this.dict = dict;
             this.sampleName = sampleName;
             final String outputFilename = outputPath.toPath().toString();
-            final LocusDepthBCICodec bciCodec = new LocusDepthBCICodec();
+            final SiteDepthBCICodec bciCodec = new SiteDepthBCICodec();
             final List<String> sampleNames = Collections.singletonList(sampleName);
             if ( bciCodec.canDecode(outputFilename) ) {
                 this.writer = bciCodec.makeSink(outputPath, dict, sampleNames, compressionLevel);
             } else {
-                final LocusDepthCodec codec = new LocusDepthCodec();
+                final SiteDepthCodec codec = new SiteDepthCodec();
                 if ( !codec.canDecode(outputFilename) ) {
                     throw new UserException("Attempting to write locus depth evidence to a file that " +
                             "can't be read as locus depth evidence: " + outputFilename + ".  The file " +
@@ -592,12 +592,12 @@ public class CollectSVEvidence extends ReadWalker {
                     new FeatureDataSource<>(inputPath.toPath().toString());
             dict.assertSameDictionary(snpSource.getSequenceDictionary());
             this.snpSourceItr = new BAFSiteIterator(snpSource.iterator());
-            this.locusDepthQueue = new ArrayDeque<>(100);
+            this.siteDepthQueue = new ArrayDeque<>(100);
             readNextLocus();
         }
 
         public void apply( final GATKRead read ) {
-            if ( read.getMappingQuality() < minMapQ || locusDepthQueue.isEmpty() ) {
+            if ( read.getMappingQuality() < minMapQ || siteDepthQueue.isEmpty() ) {
                 return;
             }
 
@@ -605,12 +605,12 @@ public class CollectSVEvidence extends ReadWalker {
             final SimpleInterval readLoc =
                     new SimpleInterval(read.getContig(), read.getStart(), read.getEnd());
             while ( true ) {
-                final LocusDepth locusDepth = locusDepthQueue.getFirst();
-                if ( compareLocus(locusDepth.getContig(), locusDepth.getStart(), readLoc) >= 0 ) {
+                final SiteDepth siteDepth = siteDepthQueue.getFirst();
+                if ( compareLocus(siteDepth.getContig(), siteDepth.getStart(), readLoc) >= 0 ) {
                     break;
                 }
-                writer.write(locusDepthQueue.removeFirst());
-                if ( locusDepthQueue.isEmpty() ) {
+                writer.write(siteDepthQueue.removeFirst());
+                if ( siteDepthQueue.isEmpty() ) {
                     if ( !readNextLocus() ) {
                         return;
                     }
@@ -620,8 +620,8 @@ public class CollectSVEvidence extends ReadWalker {
             // make sure that the last LocusCount in the queue occurs after the current read
             //  if such a LocusCount is available
             while ( true ) {
-                final LocusDepth locusDepth = locusDepthQueue.getLast();
-                if ( compareLocus(locusDepth.getContig(), locusDepth.getStart(), readLoc) > 0 ||
+                final SiteDepth siteDepth = siteDepthQueue.getLast();
+                if ( compareLocus(siteDepth.getContig(), siteDepth.getStart(), readLoc) > 0 ||
                         !readNextLocus() ) {
                     break;
                 }
@@ -642,22 +642,22 @@ public class CollectSVEvidence extends ReadWalker {
                     final int opEnd = opStart + eleLen - 1;
                     final SimpleInterval opLoc =
                             new SimpleInterval(read.getContig(), opStart, opEnd);
-                    for ( final LocusDepth locusDepth : locusDepthQueue ) {
+                    for ( final SiteDepth siteDepth : siteDepthQueue ) {
                         final int cmp =
-                                compareLocus(locusDepth.getContig(), locusDepth.getStart(), opLoc);
+                                compareLocus(siteDepth.getContig(), siteDepth.getStart(), opLoc);
                         if ( cmp > 0 ) {
                             break;
                         }
                         // don't count base calls that aren't really part of the template
                         // (if the template is shorter than the read, we can call into adaptor sequence)
-                        if ( cmp == 0 && !isBaseInsideAdaptor(read, locusDepth.getStart()) ) {
-                            final int callIdx = readIdx + locusDepth.getStart() - opStart;
+                        if ( cmp == 0 && !isBaseInsideAdaptor(read, siteDepth.getStart()) ) {
+                            final int callIdx = readIdx + siteDepth.getStart() - opStart;
                             if ( quals[callIdx] < minQ ) {
                                 continue;
                             }
                             final Nucleotide call = Nucleotide.decode(calls[callIdx]);
                             if ( call.isStandard() ) {
-                                locusDepth.observe(call.ordinal());
+                                siteDepth.observe(call.ordinal());
                             }
                         }
                     }
@@ -672,8 +672,8 @@ public class CollectSVEvidence extends ReadWalker {
         }
 
         public void close() {
-            while ( !locusDepthQueue.isEmpty() ) {
-                writer.write(locusDepthQueue.removeFirst());
+            while ( !siteDepthQueue.isEmpty() ) {
+                writer.write(siteDepthQueue.removeFirst());
             }
             writer.close();
         }
@@ -694,8 +694,8 @@ public class CollectSVEvidence extends ReadWalker {
             if ( !snpSourceItr.hasNext() ) {
                 return false;
             }
-            final LocusDepth locusDepth = new LocusDepth(snpSourceItr.next(), sampleName);
-            locusDepthQueue.add(locusDepth);
+            final SiteDepth siteDepth = new SiteDepth(snpSourceItr.next(), sampleName);
+            siteDepthQueue.add(siteDepth);
             return true;
         }
     }

@@ -11,18 +11,18 @@ import org.testng.annotations.Test;
 import java.io.IOException;
 import java.util.Collections;
 
-public class LocusDepthtoBAFIntegrationTest extends CommandLineProgramTest {
-    public static final String ld2bafTestDir = toolsTestDir + "walkers/sv/LocusDepthtoBAF/";
+public class SiteDepthtoBAFIntegrationTest extends CommandLineProgramTest {
+    public static final String ld2bafTestDir = toolsTestDir + "walkers/sv/SiteDepthtoBAF/";
 
-    @Override public String getTestedToolName() { return "LocusDepthtoBAF"; }
+    @Override public String getTestedToolName() { return "SiteDepthtoBAF"; }
 
     @Test
     public void testStdDevTooBig() throws IOException {
         final ArgumentsBuilder argsBuilder = new ArgumentsBuilder();
         argsBuilder.add(StandardArgumentDefinitions.VERBOSITY_NAME, Log.LogLevel.ERROR.name());
-        argsBuilder.add(LocusDepthtoBAF.MIN_HET_PROBABILITY, "0.");
+        argsBuilder.add(SiteDepthtoBAF.MIN_HET_PROBABILITY, "0.");
         argsBuilder.add(StandardArgumentDefinitions.SEQUENCE_DICTIONARY_NAME, hg19_chr1_1M_dict);
-        argsBuilder.add(LocusDepthtoBAF.BAF_SITES_VCF_LONG_NAME, ld2bafTestDir + "test1.vcf");
+        argsBuilder.add(SiteDepthtoBAF.BAF_SITES_VCF_LONG_NAME, ld2bafTestDir + "test1.vcf");
         argsBuilder.add(StandardArgumentDefinitions.FEATURE_SHORT_NAME, ld2bafTestDir + "test1.ld.txt");
         argsBuilder.add(StandardArgumentDefinitions.OUTPUT_SHORT_NAME, "%s");
         final IntegrationTestSpec testSpec =
@@ -37,7 +37,7 @@ public class LocusDepthtoBAFIntegrationTest extends CommandLineProgramTest {
         final ArgumentsBuilder argsBuilder = new ArgumentsBuilder();
         argsBuilder.add(StandardArgumentDefinitions.VERBOSITY_NAME, Log.LogLevel.ERROR.name());
         argsBuilder.add(StandardArgumentDefinitions.SEQUENCE_DICTIONARY_NAME, publicTestDir + "hg19micro.dict");
-        argsBuilder.add(LocusDepthtoBAF.BAF_SITES_VCF_LONG_NAME, ld2bafTestDir + "test2.vcf");
+        argsBuilder.add(SiteDepthtoBAF.BAF_SITES_VCF_LONG_NAME, ld2bafTestDir + "test2.vcf");
         argsBuilder.add(StandardArgumentDefinitions.FEATURE_SHORT_NAME, ld2bafTestDir + "test2.ld.txt");
         argsBuilder.add(StandardArgumentDefinitions.OUTPUT_SHORT_NAME, "%s");
         final IntegrationTestSpec testSpec =
@@ -52,7 +52,7 @@ public class LocusDepthtoBAFIntegrationTest extends CommandLineProgramTest {
         final ArgumentsBuilder argsBuilder = new ArgumentsBuilder();
         argsBuilder.add(StandardArgumentDefinitions.VERBOSITY_NAME, Log.LogLevel.ERROR.name());
         argsBuilder.add(StandardArgumentDefinitions.SEQUENCE_DICTIONARY_NAME, publicTestDir + "hg19micro.dict");
-        argsBuilder.add(LocusDepthtoBAF.BAF_SITES_VCF_LONG_NAME, ld2bafTestDir + "test2a.vcf");
+        argsBuilder.add(SiteDepthtoBAF.BAF_SITES_VCF_LONG_NAME, ld2bafTestDir + "test2a.vcf");
         argsBuilder.add(StandardArgumentDefinitions.FEATURE_SHORT_NAME, ld2bafTestDir + "test2.ld.txt");
         argsBuilder.add(StandardArgumentDefinitions.OUTPUT_SHORT_NAME, "%s");
         final IntegrationTestSpec testSpec =
@@ -66,7 +66,7 @@ public class LocusDepthtoBAFIntegrationTest extends CommandLineProgramTest {
         final ArgumentsBuilder argsBuilder = new ArgumentsBuilder();
         argsBuilder.add(StandardArgumentDefinitions.VERBOSITY_NAME, Log.LogLevel.ERROR.name());
         argsBuilder.add(StandardArgumentDefinitions.SEQUENCE_DICTIONARY_NAME, hg19_chr1_1M_dict);
-        argsBuilder.add(LocusDepthtoBAF.BAF_SITES_VCF_LONG_NAME, ld2bafTestDir + "test3.vcf");
+        argsBuilder.add(SiteDepthtoBAF.BAF_SITES_VCF_LONG_NAME, ld2bafTestDir + "test3.vcf");
         argsBuilder.add(StandardArgumentDefinitions.FEATURE_SHORT_NAME, ld2bafTestDir + "test3.ld.txt");
         argsBuilder.add(StandardArgumentDefinitions.OUTPUT_SHORT_NAME, "%s");
         final IntegrationTestSpec testSpec =
