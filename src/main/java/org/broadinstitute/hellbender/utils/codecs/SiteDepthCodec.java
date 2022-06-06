@@ -17,7 +17,7 @@ import java.util.List;
 /** Codec to handle SiteDepths in tab-delimited text files */
 public class SiteDepthCodec extends AsciiFeatureCodec<SiteDepth>
         implements FeatureOutputCodec<SiteDepth, FeatureOutputStream<SiteDepth>> {
-    public static final String FORMAT_SUFFIX = ".ld.txt";
+    public static final String FORMAT_SUFFIX = ".sd.txt";
     private static final Splitter splitter = Splitter.on("\t");
 
     public SiteDepthCodec() {

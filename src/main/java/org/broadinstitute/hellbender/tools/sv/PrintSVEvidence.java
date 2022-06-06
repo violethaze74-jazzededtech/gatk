@@ -29,7 +29,7 @@ import java.util.*;
  *          File extensions are *.pe.txt, *.pe.txt.gz, or *.pe.bci.</dd>
  *     <dt>SiteDepth</dt>
  *     <dd>The read counts of each base call for some sample at some locus.
- *          File extensions are *.ld.txt, *.ld.txt.gz, or *.ld.bci.</dd>
+ *          File extensions are *.sd.txt, *.sd.txt.gz, or *.sd.bci.</dd>
  *     <dt>SplitReadEvidence</dt>
  *     <dd>The number of chimeric reads in some sample at some locus.
  *          File extensions are *.sr.txt, *.sr.txt.gz, or *.sr.bci.</dd>

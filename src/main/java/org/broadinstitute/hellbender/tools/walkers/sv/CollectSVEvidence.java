@@ -582,7 +582,7 @@ public class CollectSVEvidence extends ReadWalker {
                 if ( !codec.canDecode(outputFilename) ) {
                     throw new UserException("Attempting to write locus depth evidence to a file that " +
                             "can't be read as locus depth evidence: " + outputFilename + ".  The file " +
-                            "name should end with \".ld.txt\", \".ld.txt.gz\", or \".ld.bci\".");
+                            "name should end with \".sd.txt\", \".sd.txt.gz\", or \".sd.bci\".");
                 }
                 this.writer = codec.makeSink(outputPath, dict, sampleNames, compressionLevel);
             }

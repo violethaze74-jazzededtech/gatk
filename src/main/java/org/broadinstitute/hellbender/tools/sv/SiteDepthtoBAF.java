@@ -56,7 +56,7 @@ import java.util.List;
  *
  * <pre>
  *     gatk SiteDepthtoBAF \
- *       -F file1.ld.txt.gz [-F file2.ld.txt.gz ...] \
+ *       -F file1.sd.txt.gz [-F file2.sd.txt.gz ...] \
  *       -O merged.baf.bci
  * </pre>
  *
@@ -168,23 +168,23 @@ public class SiteDepthtoBAF extends MultiFeatureWalker<SiteDepth> {
      * heterozygosity.  If this fails, null is returned.  If the test succeeds,
      * the depth of the alt call as a fraction of the total depth is returned as BafEvidence.
      */
-    @VisibleForTesting BafEvidence calcBAF( final SiteDepth ld,
+    @VisibleForTesting BafEvidence calcBAF( final SiteDepth sd,
                                             final int refIndex,
                                             final int altIndex ) {
-        final int totalDepth = ld.getTotalDepth();
+        final int totalDepth = sd.getTotalDepth();
         if ( totalDepth < minTotalDepth ) {
             return null;
         }
         final double expectRefAlt = totalDepth / 2.;
-        final double altDepth = ld.getDepth(altIndex);
-        final double refDiff = ld.getDepth(refIndex) - expectRefAlt;
+        final double altDepth = sd.getDepth(altIndex);
+        final double refDiff = sd.getDepth(refIndex) - expectRefAlt;
         final double altDiff = altDepth - expectRefAlt;
         final double chiSq = (refDiff * refDiff + altDiff * altDiff) / expectRefAlt;
         final double fitProb = 1. - chiSqDist.cumulativeProbability(chiSq);
         if ( fitProb < minHetProbability ) {
             return null;
         }
-        return new BafEvidence(ld.getSample(), ld.getContig(), ld.getStart(), altDepth / totalDepth);
+        return new BafEvidence(sd.getSample(), sd.getContig(), sd.getStart(), altDepth / totalDepth);
     }
 
     private boolean sameLocus( final Locatable locus ) {
@@ -213,8 +213,8 @@ public class SiteDepthtoBAF extends MultiFeatureWalker<SiteDepth> {
             throw new UserException("alt call is not [ACGT] in vcf at " + vc.getContig() + ":" + vc.getStart());
         }
         final List<BafEvidence> beList = new ArrayList<>(sameLocusBuffer.size());
-        for ( final SiteDepth ld : sameLocusBuffer ) {
-            final BafEvidence bafEvidence = calcBAF(ld, refIndex, altIndex);
+        for ( final SiteDepth sd : sameLocusBuffer ) {
+            final BafEvidence bafEvidence = calcBAF(sd, refIndex, altIndex);
             if ( bafEvidence != null ) {
                 beList.add(bafEvidence);
             }

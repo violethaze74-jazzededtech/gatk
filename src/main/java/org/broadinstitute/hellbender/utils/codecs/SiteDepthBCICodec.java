@@ -17,7 +17,7 @@ import java.util.List;
 /** Codec to handle SiteDepths in BlockCompressedInterval files */
 public class SiteDepthBCICodec extends AbstractBCICodec<SiteDepth> {
     private boolean versionChecked = false;
-    private static final String LD_BCI_FILE_EXTENSION = ".ld.bci";
+    private static final String LD_BCI_FILE_EXTENSION = ".sd.bci";
 
     @Override
     public SiteDepth decode( final Reader<SiteDepth> reader ) throws IOException {
